@@ -22,13 +22,13 @@ sop-decision-adapter <command> [flags]
 
 | Flag           | Default                | Description                                                                 |
 | -------------- | ---------------------- | --------------------------------------------------------------------------- |
-| `-provider`    | `nimble`               | Provider to use. Only `nimble` is implemented today.                        |
+| `-provider`    | `nimble`               | Provider to use: `nimble` or `julia`. Unknown names error with the available list. |
 | `-file`        |                        | Path to a JSON `DecisionRequest` (multi-question). Takes precedence over the flag form. |
 | `-state`       |                        | Free-form state/context (single-question form).                             |
 | `-choices`     |                        | Comma-separated allowed choices (single-question form). Required when `-file` is unset. |
 | `-decision-id` | `example`              | Question ID for the single-question form.                                   |
-| `-base-url`    | env `OLLAMA_BASE_URL`  | Provider base URL.                                                          |
-| `-model`       | env `NIMBLE_MODEL`     | Model name.                                                                 |
+| `-base-url`    | env `OLLAMA_BASE_URL`  | Nimble provider base URL.                                                   |
+| `-model`       | env `NIMBLE_MODEL` / `JULIA_MODEL` | Model name.                                                      |
 | `-timeout`     | `30s`                  | Per-request timeout.                                                        |
 | `-json`        | `false`                | Print the result as indented JSON.                                          |
 
@@ -50,6 +50,15 @@ Multi-question request from a file:
 
 ```sh
 sop-decision-adapter decide -provider nimble \
+  -file tests/fixtures/risk-evaluation.json -json
+```
+
+The Julia provider needs an inference command (`JULIA_INFERENCE_CMD`); with none
+configured it reports unavailable.
+
+```sh
+JULIA_INFERENCE_CMD="my-onnx-runner --model julia.onnx" \
+  sop-decision-adapter decide -provider julia \
   -file tests/fixtures/risk-evaluation.json -json
 ```
 

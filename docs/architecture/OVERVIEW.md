@@ -14,21 +14,28 @@ agentic-sop
      v
 decision/                         (PUBLIC, importable by agentic-sop)
      |   DecisionRequest ──▶ Provider ──▶ DecisionResult
-     v
-internal/providers/nimble
-     |   SystemOne translation (CHOICE / BOOLEAN→noul / SCORE)
-     v
-POST /v1/systemone
-     v
-Ollama
-     v
-Nimble
+     +-------------------------------+
+     v                               v
+internal/providers/nimble        internal/providers/julia
+     |   SystemOne translation        |   provider-neutral Inputs/Outputs
+     v                               v
+POST /v1/systemone               Runner (seam)
+     v                               v
+Ollama                           ONNX inference
+     v                               v
+Nimble                           Julia
 ```
+
+Both providers implement the same public `decision.Provider` contract. In Julia
+the concrete ONNX execution is isolated behind the `Runner` interface
+(`Name`/`Available`/`Run`): the shipped `CommandRunner` runs an operator-provided
+inference command, and a future in-process ONNX binding can replace it without
+touching the adapter, translation, CLI, or contract.
 
 Dependencies point one way only: `agentic-sop` depends on the public `decision`
 package, which is implemented by the providers here. This repository does **not**
 import `agentic-sop`, and the `decision` package exposes no provider-specific
-types (no `SystemOne`, no `noul`, no Ollama shapes).
+types (no `SystemOne`, no `noul`, no Ollama/ONNX/Julia shapes).
 
 ## SOP integration boundary
 
@@ -43,8 +50,9 @@ types (no `SystemOne`, no `noul`, no Ollama shapes).
 
 | Package                     | Responsibility                                                                                                          | Must not contain                                     |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `decision`                  | The stable, public contract: `Provider`, `DecisionRequest`, `DecisionResult`, question/answer types, normalized errors. | Any Ollama/Nimble/SystemOne/`noul` type; SOP policy. |
+| `decision`                  | The stable, public contract: `Provider`, `DecisionRequest`, `DecisionResult`, question/answer types, normalized errors. | Any Ollama/Nimble/SystemOne/`noul`/ONNX/Julia type; SOP policy. |
 | `internal/providers/nimble` | Translate the Nimble decision model (via `/v1/systemone`) to/from the contract.                                         | SOP policy; assumptions that the backend is local.   |
+| `internal/providers/julia`  | Translate the Julia/ONNX decision model (behind the `Runner` seam) to/from the contract.                                | SOP policy; assumptions about the concrete runtime.  |
 | `cmd/sop-decision-adapter`  | Minimal CLI to exercise providers.                                                                                      | Business logic; a CLI framework.                     |
 
 ## Nimble provider structure
@@ -72,6 +80,25 @@ The exact mapping, availability behavior, and error normalization are specified
 in the [Nimble / SystemOne provider](../specs/nimble-systemone.md) spec; testing
 is described in the [testing guide](../guides/testing.md); configuration in the
 [configuration reference](../reference/configuration.md).
+
+## Julia provider structure
+
+`internal/providers/julia` mirrors Nimble's separation of concerns so the
+provider is testable without any ONNX runtime:
+
+- **Runner** (`runner.go`) — the `Runner` interface plus provider-neutral
+  `Inputs`/`Outputs` wire types and the stdlib `CommandRunner`. Isolates concrete
+  ONNX execution; exports no vendor vocabulary.
+- **Translation** (`translate.go`) — `BuildInputs` and `NormalizeOutputs`. Pure
+  functions; no I/O.
+- **Provider** (`julia.go`) — wires runner and translation, validates input,
+  classifies errors; implements `decision.Provider`.
+- **Config** (`config.go`) — environment configuration (`JULIA_*`).
+
+Because the runtime is behind the `Runner` interface, the provider is tested with
+`RunnerFunc` fakes and hermetic `sh -c` commands — never requiring ONNX or Julia.
+The exact contract is specified in the
+[Julia (ONNX) provider](../specs/julia-adapter.md) spec.
 
 ## Shadow mode (Phase 4)
 
@@ -111,6 +138,7 @@ Rules:
 ## Related
 
 - [Decision contract](../specs/decision-contract.md) ·
-  [Nimble / SystemOne provider](../specs/nimble-systemone.md)
+  [Nimble / SystemOne provider](../specs/nimble-systemone.md) ·
+  [Julia (ONNX) provider](../specs/julia-adapter.md)
 - [Requirements](../requirements/PRD.md) · [Roadmap](../plans/PLAN.md) ·
   [Backlog](../plans/BACKLOG.md)

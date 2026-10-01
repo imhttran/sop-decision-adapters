@@ -1,7 +1,8 @@
 # PRD — sop-decision-adapters
 
-Status: Phase 0 and Phase 1.1 **COMPLETE**; Phase 2 **PLANNED**
-(see the [roadmap](../plans/PLAN.md)).
+Status: Phase 0 and Phase 1.1 **COMPLETE**; Phase 2 Julia adapter **PARTIAL**
+(adapter + Runner seam shipped; concrete ONNX runtime binding deferred);
+Phase 3 **PLANNED** (see the [roadmap](../plans/PLAN.md)).
 Owner: agentic-sop platform.
 License: Apache-2.0.
 
@@ -40,13 +41,15 @@ implicitly become the source of policy.
   evaluate call.
 - A generic plugin/discovery framework or dynamic provider loading.
 - Databases, web UI, MCP, or agent orchestration.
-- Implementing Julia, CLM, or JEV (see the [roadmap](../plans/PLAN.md)).
+- Implementing CLM or JEV (see the [roadmap](../plans/PLAN.md)). The Julia
+  adapter shipped in Phase 2, but a concrete in-process ONNX runtime binding is
+  deferred (tracked in the [backlog](../plans/BACKLOG.md)).
 
 ## Users
 
 - **`agentic-sop` core** — consumes the decision API, owns policy and gates.
 - **Platform / adapter engineers** — implement and operate individual providers
-  (Nimble first), and later shadow comparisons.
+  (Nimble and Julia today), and later shadow comparisons.
 - **Model owners** — expose a decision model behind the contract without touching
   SOP policy.
 - **Operators** — run the `sop-decision-adapter` CLI to exercise a provider, and
@@ -77,7 +80,7 @@ CLM, or JEV types through the contract.
 | Provider          | Backend                                        | Phase |
 | ----------------- | ---------------------------------------------- | ----- |
 | **Nimble**        | Ollama → `/v1/systemone` → Nimble              | 1.1   |
-| **Julia**         | ONNX runtime                                   | 2     |
+| **Julia**         | ONNX inference behind a configurable Runner    | 2 (adapter) |
 | **CLM**           | CLM                                            | 3     |
 | **JEV / OpenJEV** | OpenJEV                                        | 3     |
 | **Shadow**        | wraps a primary + shadow provider (comparison) | 4     |
@@ -86,6 +89,12 @@ Nimble is the reference implementation; its `/v1/systemone` mapping, availabilit
 check, and error normalization are specified in the
 [Nimble / SystemOne provider](../specs/nimble-systemone.md) spec. There is no
 prompt-based `/api/generate` decision path.
+
+The Julia adapter translates to/from the contract behind a `Runner` seam; the
+shipped `CommandRunner` runs an operator-provided inference command and a future
+in-process ONNX binding can replace it. Its Runner contract, normalization rules,
+and error mapping are specified in the
+[Julia (ONNX) provider](../specs/julia-adapter.md) spec.
 
 ## SOP integration boundary
 
@@ -120,9 +129,21 @@ Phase 0 and Phase 1.1 are successful when:
 9. Documentation states the SOP boundary and the shadow-mode constraint (shadow
    providers must never affect execution).
 
+Phase 2 (Julia adapter) additionally satisfies:
+
+10. `internal/providers/julia` implements `decision.Provider` against the
+    unchanged contract, isolating concrete ONNX execution behind a `Runner`
+    interface and shipping no ONNX/Julia types through `decision`.
+11. The Julia adapter is selectable from the CLI (`decide -provider julia`) and
+    configurable via `JULIA_*`; a missing inference command reports unavailable
+    rather than failing silently.
+12. `go test ./...` covers the Julia adapter fully offline; a live path is
+    opt-in behind `JULIA_INTEGRATION_TEST=1` and `JULIA_INFERENCE_CMD`.
+
 ## Related documentation
 
 - [Architecture overview](../architecture/OVERVIEW.md)
 - [Decision contract](../specs/decision-contract.md) ·
-  [Nimble / SystemOne provider](../specs/nimble-systemone.md)
+  [Nimble / SystemOne provider](../specs/nimble-systemone.md) ·
+  [Julia (ONNX) provider](../specs/julia-adapter.md)
 - [Roadmap](../plans/PLAN.md) · [Backlog](../plans/BACKLOG.md)

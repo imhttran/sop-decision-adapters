@@ -22,6 +22,7 @@ rather than restate it.
 | [architecture/OVERVIEW.md](architecture/OVERVIEW.md) | the layering, package responsibilities, and the SOP boundary. |
 | [specs/decision-contract.md](specs/decision-contract.md) | the normative public decision API (Provider, request, result, errors). |
 | [specs/nimble-systemone.md](specs/nimble-systemone.md) | the normative Nimble ↔ `/v1/systemone` mapping, availability, and error normalization. |
+| [specs/julia-adapter.md](specs/julia-adapter.md) | the normative Julia (ONNX) Runner contract, normalization rules, and error mapping. |
 | [reference/cli.md](reference/cli.md) | the CLI commands, flags, and exit codes. |
 | [reference/configuration.md](reference/configuration.md) | the environment variables and their defaults. |
 | [guides/getting-started.md](guides/getting-started.md) | how to build and make a first decision. |

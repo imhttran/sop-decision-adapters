@@ -19,9 +19,23 @@ Deferred work. Nothing here is required for the current shipped phase.
       multi-question CLI example (`tests/fixtures/risk-evaluation.json`).
 - [x] **Opt-in live integration test.** `NIMBLE_INTEGRATION_TEST=1 go test ./...`
       validates the contract against a real backend.
+- [x] **Julia provider adapter (Phase 2).** `internal/providers/julia` adapts
+      `DecisionRequest` to a provider-neutral `Inputs` structure and normalizes
+      raw `Outputs` back into a `decision.DecisionResult`. Concrete ONNX execution
+      is isolated behind the `Runner` seam, with a stdlib-only `CommandRunner`
+      driven by `JULIA_INFERENCE_CMD`. Ships with offline tests, fixtures under
+      `tests/fixtures/julia/`, and CLI selection (`decide -provider julia`). The
+      public contract is unchanged.
 
 ## Deferred — later phases
 
+- [ ] **Concrete in-process ONNX runtime binding for Julia.** The Julia adapter
+      ships with a configurable `Runner` seam and an external `CommandRunner`
+      (`JULIA_INFERENCE_CMD`). Replace/augment it with an in-process ONNX binding
+      that satisfies the same `Runner` interface (`Name`/`Available`/`Run`) so
+      live inference no longer requires an operator-provided command. Live
+      validation requires a real ONNX runtime/model; until then the default suite
+      stays offline. **Owner:** `internal/providers/julia`.
 - [ ] **First-class score-scale representation.** SystemOne `score` questions
       require `criteria` to be an array of 2–26 candidate descriptions; a string or
       a 0/1-element array is rejected with HTTP 400. The provider-neutral
@@ -30,9 +44,6 @@ Deferred work. Nothing here is required for the current shipped phase.
       `decision.ErrInvalidRequest` when fewer than two candidates are supplied).
       Add a first-class score-scale representation to the provider-neutral contract
       so score candidates no longer have to ride along in `Choices`.
-- [ ] **Julia provider (Phase 2)** — adapt Julia/ONNX to the Phase 1.1 decision
-      contract without changing it unless a genuine provider-neutral deficiency is
-      found.
 - [ ] **CLM, JEV/OpenJEV providers (Phase 3)**.
 - [ ] **Provider registry** — dynamic provider discovery/selection.
 - [ ] **Shadow evaluation (Phase 4)** — run a second provider for observation

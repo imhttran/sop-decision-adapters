@@ -2,8 +2,8 @@
 
 **Type:** Guide
 
-The test suite is **offline by default** — it never requires Ollama to be
-running.
+The test suite is **offline by default** — it never requires Ollama, ONNX,
+Julia, or the network.
 
 ## Offline
 
@@ -17,8 +17,13 @@ Coverage:
 - `internal/providers/nimble` — SystemOne request translation, response
   normalization (missing / unknown / out-of-range answers rejected), provider
   behavior via a fake transport, and the full HTTP path via `net/http/httptest`.
-- `tests/fixtures` — shipped fixtures are valid `DecisionRequest`s, and the
-  golden Nimble response is parsed through the production parser.
+- `internal/providers/julia` — `BuildInputs` mapping, `NormalizeOutputs`
+  normalization (missing / incompatible / unknown / out-of-range rejected),
+  provider behavior via `RunnerFunc` fakes, and `CommandRunner` round-trips via
+  hermetic `sh -c` commands (no ONNX or Julia runtime).
+- `tests/fixtures` — shipped fixtures are valid `DecisionRequest`s; the golden
+  Nimble response is parsed through the production parser; the Julia sample
+  `Outputs` JSON normalizes into a valid `DecisionResult`.
 
 ### Golden fixture
 
@@ -27,6 +32,8 @@ from a locally installed Ollama + Nimble instance. It is the first known-good
 provider contract fixture and drives the production parser offline.
 
 ## Live integration (opt-in)
+
+### Nimble
 
 To validate the contract against a real Ollama + Nimble installation:
 
@@ -39,9 +46,26 @@ present, answer types match the questions, selected choices are allowed, and
 probabilities/confidence are in range. It deliberately does **not** assert fixed
 judgments such as `risk == HIGH`, because model decisions may change.
 
+### Julia
+
+The Julia suite is offline by default. The opt-in live path runs only when
+**both** `JULIA_INTEGRATION_TEST=1` and `JULIA_INFERENCE_CMD` are set; otherwise
+the test skips. It drives the configured inference command through the
+`CommandRunner` without asserting fixed judgments.
+
+```sh
+export JULIA_INTEGRATION_TEST=1
+export JULIA_INFERENCE_CMD="my-onnx-runner --model julia.onnx"
+go test ./internal/providers/julia/
+```
+
+`JULIA_MODEL_PATH`, when set, is forwarded to the inference command as an
+environment variable.
+
 ## Related
 
 - [Nimble / SystemOne provider](../specs/nimble-systemone.md) — the behavior
   under test.
+- [Julia (ONNX) provider](../specs/julia-adapter.md) — the Runner contract.
 - [Configuration reference](../reference/configuration.md) — the
-  `NIMBLE_INTEGRATION_TEST` variable.
+  `NIMBLE_INTEGRATION_TEST` and `JULIA_INTEGRATION_TEST` variables.

@@ -95,23 +95,44 @@ installed Nimble; a manual CLI request returns all requested answers.
 
 ## Phase 2 — Julia
 
-**State: PLANNED.**
+**State: PARTIAL — adapter complete; concrete ONNX runtime binding deferred.**
 
 **Goal:** adapt Julia (ONNX) to the Phase 1.1 decision contract **without
 changing that contract** unless a genuine provider-neutral deficiency is found.
 
-Deliverables:
+What shipped (adapter + configurable Runner seam + offline tests + CLI
+selection):
 
-- `internal/providers/julia` translating `DecisionRequest` into the ONNX model's
-  input tensor(s) and back into a `DecisionResult`.
-- Model loading/config (model path, input/output names, label mapping) via
-  environment.
-- Testability: an in-process fake ONNX/runner interface so tests do not require
-  the ONNX runtime.
+- `internal/providers/julia` adapts `DecisionRequest` to a provider-neutral
+  `Inputs` structure and normalizes raw `Outputs` back into a
+  `decision.DecisionResult`; the public contract is unchanged.
+- The concrete ONNX execution is isolated behind the `Runner` interface
+  (`Name`/`Available`/`Run`). A stdlib-only `CommandRunner`
+  (`JULIA_INFERENCE_CMD`, JSON-in/JSON-out, context timeout, stderr capture,
+  `JULIA_MODEL_PATH` forwarding) is the placeholder implementation; a `RunnerFunc`
+  adapter makes tests trivial.
+- Configuration via `JULIA_MODEL`, `JULIA_MODEL_PATH`, `JULIA_INFERENCE_CMD`,
+  `JULIA_TIMEOUT` (`internal/providers/julia/config.go`).
+- Error normalization mirrors Nimble: request problems → `ErrInvalidRequest`,
+  unreachable/unconfigured runner → `ErrUnavailable`, undecodable or
+  non-normalizable output → `ErrMalformedResponse`, anything else →
+  `ErrProviderFailure`.
+- Offline test suite (`translate_test.go`, `config_test.go`, `julia_test.go`,
+  `runner_test.go`) plus fixtures under `tests/fixtures/julia/`. No ONNX, Julia,
+  Ollama, or network is required.
+- CLI: `decide -provider julia -file tests/fixtures/risk-evaluation.json`.
 
-Exit criteria: the same fixtures produce valid `DecisionResult`s; no Julia/ONNX
-and no SystemOne-specific types leak into the public `decision` package. Nimble
-is the reference implementation against which Julia is tested.
+What remains:
+
+- A concrete **in-process ONNX binding** that satisfies the same `Runner`
+  interface (tracked in [`BACKLOG.md`](BACKLOG.md)). Until then live validation
+  requires an operator-provided inference command/runtime via
+  `JULIA_INFERENCE_CMD`.
+
+Exit criteria (met for the adapter): the same fixtures produce valid
+`DecisionResult`s through the Runner seam; no Julia/ONNX and no SystemOne-specific
+types leak into the public `decision` package. Nimble remains the reference
+implementation against which Julia is tested.
 
 ---
 
@@ -171,7 +192,8 @@ never propagated as failures of the primary decision.
 Tracked, actionable deferred items live in [`BACKLOG.md`](BACKLOG.md). In
 summary:
 
-- Julia, CLM, and JEV implementations (Phases 2–3).
+- Julia concrete in-process ONNX runtime binding (adapter shipped in Phase 2);
+  CLM and JEV implementations (Phase 3).
 - Databases, web UI, MCP, agent orchestration.
 - Any `agentic-sop` dependency.
 - A generic plugin/discovery framework.

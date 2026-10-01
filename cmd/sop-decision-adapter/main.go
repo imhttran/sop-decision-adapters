@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/imhttran/sop-decision-adapters/decision"
+	"github.com/imhttran/sop-decision-adapters/internal/providers/julia"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/nimble"
 )
 
@@ -45,7 +46,7 @@ func runDecide(args []string) int {
 	var (
 		providerName = fs.String("provider", "nimble", "decision provider to use")
 		baseURL      = fs.String("base-url", "", "provider base URL (defaults to OLLAMA_BASE_URL)")
-		model        = fs.String("model", "", "model name (defaults to NIMBLE_MODEL)")
+		model        = fs.String("model", "", "model name (defaults to NIMBLE_MODEL/JULIA_MODEL)")
 		file         = fs.String("file", "", "path to a JSON DecisionRequest file")
 		state        = fs.String("state", "", "free-form state/context (used when -file is not set)")
 		choices      = fs.String("choices", "", "comma-separated allowed choices for a single choice question")
@@ -67,7 +68,7 @@ func runDecide(args []string) int {
 		return 2
 	}
 
-	provider, cfg, err := newProvider(*providerName, *baseURL, *model, *timeout)
+	provider, err := newProvider(*providerName, *baseURL, *model, *timeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
@@ -77,7 +78,7 @@ func runDecide(args []string) int {
 	defer cancel()
 
 	if !provider.Available(ctx) {
-		fmt.Fprintf(os.Stderr, "warning: provider %q not available at %s\n", provider.Name(), cfg.BaseURL)
+		fmt.Fprintf(os.Stderr, "warning: provider %q is not available\n", provider.Name())
 	}
 
 	result, err := provider.Decide(ctx, req)
@@ -129,23 +130,32 @@ func buildRequest(file, decisionID, state, choices string) (decision.DecisionReq
 	}, nil
 }
 
-// newProvider resolves the requested provider name. Nimble is the only
-// implementation today; the switch is the seam for Julia, CLM, and JEV.
-func newProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, nimble.Config, error) {
-	cfg := nimble.ConfigFromEnv()
-	if strings.TrimSpace(baseURL) != "" {
-		cfg.BaseURL = baseURL
-	}
-	if strings.TrimSpace(model) != "" {
-		cfg.Model = model
-	}
-	cfg.Timeout = timeout
+// availableProviders lists the provider names the CLI can select.
+const availableProviders = "nimble, julia"
 
+// newProvider resolves the requested provider name. The switch is the seam for
+// additional adapters.
+func newProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", "nimble":
-		return nimble.New(cfg, nil), cfg, nil
+		cfg := nimble.ConfigFromEnv()
+		if strings.TrimSpace(baseURL) != "" {
+			cfg.BaseURL = baseURL
+		}
+		if strings.TrimSpace(model) != "" {
+			cfg.Model = model
+		}
+		cfg.Timeout = timeout
+		return nimble.New(cfg, nil), nil
+	case "julia":
+		cfg := julia.ConfigFromEnv()
+		if strings.TrimSpace(model) != "" {
+			cfg.Model = model
+		}
+		cfg.Timeout = timeout
+		return julia.New(cfg, nil), nil
 	default:
-		return nil, cfg, fmt.Errorf("unsupported provider %q (available: nimble)", name)
+		return nil, fmt.Errorf("unsupported provider %q (available: %s)", name, availableProviders)
 	}
 }
 
@@ -210,9 +220,9 @@ Usage:
   sop-decision-adapter decide [flags]
 
 Flags (decide):
-  -provider string    decision provider to use (default "nimble")
-  -base-url string    provider base URL (defaults to OLLAMA_BASE_URL)
-  -model string       model name (defaults to NIMBLE_MODEL)
+  -provider string    decision provider to use (default "nimble"; available: nimble, julia)
+  -base-url string    Nimble provider base URL (defaults to OLLAMA_BASE_URL)
+  -model string       model name (defaults to NIMBLE_MODEL or JULIA_MODEL)
   -file string        path to a JSON DecisionRequest file (multi-question)
   -state string       free-form state/context (single-question form)
   -choices string     comma-separated allowed choices (single-question form)
@@ -220,13 +230,21 @@ Flags (decide):
   -timeout duration   request timeout (default 30s)
   -json               print the DecisionResult as JSON
 
-Environment:
+Environment (nimble):
   OLLAMA_BASE_URL     Ollama-compatible backend root (default http://localhost:11434)
   NIMBLE_MODEL        Nimble model name (default "nimble")
   NIMBLE_TIMEOUT      request timeout (default 30s)
 
+Environment (julia):
+  JULIA_MODEL          Julia model identifier (default "julia")
+  JULIA_MODEL_PATH     path to the ONNX model (forwarded to the inference command)
+  JULIA_INFERENCE_CMD  external inference command, whitespace-split into argv
+                       (empty => provider unavailable)
+  JULIA_TIMEOUT        inference timeout (default 30s)
+
 Examples:
   sop-decision-adapter decide -provider nimble -file tests/fixtures/risk-evaluation.json
+  sop-decision-adapter decide -provider julia -file tests/fixtures/risk-evaluation.json
   sop-decision-adapter decide -decision-id risk -choices LOW,MEDIUM,HIGH \
     -state "deploying a schema migration during business hours"
 `)
