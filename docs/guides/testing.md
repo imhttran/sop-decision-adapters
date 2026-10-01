@@ -48,19 +48,30 @@ judgments such as `risk == HIGH`, because model decisions may change.
 
 ### Julia
 
-The Julia suite is offline by default. The opt-in live path runs only when
-**both** `JULIA_INTEGRATION_TEST=1` and `JULIA_INFERENCE_CMD` are set; otherwise
-the test skips. It drives the configured inference command through the
-`CommandRunner` without asserting fixed judgments.
+The Julia suite is offline by default: `BuildInputs`/`NormalizeOutputs` mapping,
+the 2–20 option limit, provider behavior via `RunnerFunc` fakes, and
+`CommandRunner` round-trips via hermetic `sh -c` commands. The helper's pure
+functions have their own standard-library tests:
+
+```sh
+python3 tools/julia/test_infer.py
+```
+
+The opt-in live path runs only when `JULIA_INTEGRATION_TEST=1`. It SKIPS (never
+fails the suite) when the runtime is not configured, otherwise it drives Go →
+helper → ONNX Runtime → Julia-1-ONNX and asserts the contract without asserting
+fixed judgments:
 
 ```sh
 export JULIA_INTEGRATION_TEST=1
-export JULIA_INFERENCE_CMD="my-onnx-runner --model julia.onnx"
-go test ./internal/providers/julia/
+export JULIA_MODEL_PATH=/path/to/julia-1.onnx
+go test ./...
 ```
 
-`JULIA_MODEL_PATH`, when set, is forwarded to the inference command as an
-environment variable.
+`JULIA_TOKENIZER_PATH` (default `tokenizer.json` beside the model),
+`JULIA_MODEL_ID`, `JULIA_MAX_TOKENS`, and `JULIA_PYTHON` are read by the helper.
+`JULIA_MODEL_PATH` is forwarded to the inference command as an environment
+variable. See [`tools/julia/README.md`](../../tools/julia/README.md).
 
 ## Related
 

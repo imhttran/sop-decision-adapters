@@ -128,6 +128,29 @@ func TestProviderDecideInvalidRequest(t *testing.T) {
 	assertProviderError(t, err)
 }
 
+func TestProviderDecideRejectsJuliaOptionLimits(t *testing.T) {
+	// A one-choice question is valid for the provider-neutral contract but has no
+	// valid Julia decision, so Decide must reject it before running inference.
+	r := &countingRunner{outputs: okOutputs()}
+	req := decision.DecisionRequest{
+		State: "s",
+		Questions: []decision.Question{{
+			ID:       "risk",
+			Type:     decision.QuestionChoice,
+			Criteria: "c",
+			Choices:  []string{"LOW"},
+		}},
+	}
+	_, err := New(Config{}, r).Decide(context.Background(), req)
+	if !errors.Is(err, decision.ErrInvalidRequest) {
+		t.Fatalf("error = %v, want ErrInvalidRequest", err)
+	}
+	if r.runCalls != 0 {
+		t.Errorf("Run called %d times, want 0 for a request Julia cannot represent", r.runCalls)
+	}
+	assertProviderError(t, err)
+}
+
 func TestProviderDecideUnavailable(t *testing.T) {
 	r := &countingRunner{err: errRunnerUnavailable}
 	_, err := New(Config{}, r).Decide(context.Background(), exampleRequest())

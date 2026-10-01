@@ -14,18 +14,19 @@ import (
 	"github.com/imhttran/sop-decision-adapters/decision"
 )
 
-// This file defines the Runner seam: the provider-neutral boundary between the
-// Julia adapter and the concrete ONNX execution that actually evaluates a
-// decision. Nothing here speaks Julia, ONNX, Nimble, SystemOne, or Ollama
-// vocabulary; it is a generic "given Inputs, produce Outputs" contract.
+// This file defines the Runner seam: the boundary between the Julia adapter and
+// the concrete ONNX execution that actually evaluates a decision. The structs
+// here are Julia adapter/runtime structures, not part of the provider-neutral
+// public contract: they carry Julia's native vocabulary (qtype, ordered options)
+// and exist only to describe one inference call.
 //
 // The adapter depends only on the Runner interface, so it can be exercised in
 // tests without any ONNX runtime, and a future in-process ONNX binding can
-// replace the external command runner without touching the adapter, the
+// replace the external helper process without touching the adapter, the
 // translation layer, the CLI, or the public decision contract.
 
-// Inputs is the provider-neutral model invocation passed to a Runner. It
-// carries the free-form state and one entry per question to evaluate.
+// Inputs is one Julia runtime inference request. It carries the free-form state
+// and one entry per question to evaluate.
 type Inputs struct {
 	// State is the free-form context the decision is made against.
 	State string `json:"state"`
@@ -33,26 +34,29 @@ type Inputs struct {
 	Questions []QuestionInput `json:"questions"`
 }
 
-// QuestionInput is a single question handed to the model. It is deliberately
-// provider-neutral: no adapter-private field names appear here.
+// QuestionInput is a single question handed to the Julia runtime. It carries
+// Julia's native question type and ordered options, so the runtime does not need
+// to re-derive them from provider-neutral question types.
 type QuestionInput struct {
 	// ID identifies the question and keys the corresponding output.
 	ID string `json:"id"`
-	// Type is the provider-neutral question type.
+	// Type is the provider-neutral question type, retained for diagnostics.
 	Type decision.QuestionType `json:"type"`
+	// QType is Julia's native question type: 0 choice, 1 score, 2 noul/boolean.
+	QType int `json:"qtype"`
 	// Text is the resolved natural-language instruction for the question.
 	Text string `json:"text"`
-	// Labels are the allowed outcomes for a choice question; empty for boolean
-	// and score questions.
-	Labels []string `json:"labels,omitempty"`
+	// Options are the ordered Julia options. For BOOLEAN these are always
+	// ["false", "true"] (index 0 false, index 1 true).
+	Options []string `json:"options,omitempty"`
 }
 
 // Outputs is the raw, per-question result returned by a Runner.
 //
-// It is intentionally close to the model's native output and is normalized by
-// the translation layer before it reaches callers. In particular it does not
-// prescribe a boolean representation: a boolean question reports its result via
-// Probability.
+// It is close to the model's native output and is normalized by the translation
+// layer before it reaches callers. In particular it does not prescribe a boolean
+// representation: a boolean question reports its result via Probability (the
+// model's yes-probability).
 type Outputs struct {
 	// Model is the model identifier the runner reports, when known.
 	Model string `json:"model,omitempty"`
@@ -79,10 +83,9 @@ type QuestionOutput struct {
 	Confidence *float64 `json:"confidence,omitempty"`
 }
 
-// Runner executes the Julia/ONNX model. Implementations translate the
-// provider-neutral Inputs into whatever the concrete runtime needs (an external
-// inference command today, an in-process ONNX binding later) and return the raw
-// Outputs.
+// Runner executes the Julia/ONNX model. Implementations take a Julia runtime
+// request (Inputs) and return the raw Outputs (an external helper process today,
+// an in-process ONNX binding later).
 //
 // A Runner must be safe to call with a cancelled or expired context and must
 // surface transport-like failures in a way the adapter can classify (see
@@ -152,17 +155,23 @@ func isRunnerMalformed(err error) bool { return errors.Is(err, errRunnerMalforme
 // command. It marshals Inputs to the command's stdin as JSON and decodes Outputs
 // from the command's stdout as JSON.
 //
-// CommandRunner is the placeholder for a concrete ONNX runtime: the command is
-// operator-provided (for example a small Julia script or a native ONNX CLI) and
-// is expected to implement the JSON-in/JSON-out contract. An in-process ONNX
-// binding can replace CommandRunner later without changing the Runner interface.
+// The documented, default execution path is the repository-owned Python/ONNX
+// helper (tools/julia/infer.py) invoked as `python3 <helper>`; an operator may
+// override it with JULIA_INFERENCE_CMD. Either way the command implements the
+// same JSON-in/JSON-out contract. An in-process ONNX binding can replace
+// CommandRunner later without changing the Runner interface.
 type CommandRunner struct {
 	// Command is the argv of the inference command. An empty Command means the
 	// runner is unconfigured and therefore unavailable.
 	Command []string
 	// ModelPath optionally points at the ONNX model. When set it is exported to
-	// the child as JULIA_MODEL_PATH.
+	// the child as JULIA_MODEL_PATH and its presence is checked by Available.
 	ModelPath string
+	// HelperPath is the repository-owned helper script backing the default
+	// command, when one is used. When set, Available requires it to exist and
+	// requires a real ModelPath; an operator-provided JULIA_INFERENCE_CMD leaves
+	// it empty.
+	HelperPath string
 	// Timeout bounds a single inference call. A non-positive value falls back
 	// to DefaultTimeout.
 	Timeout time.Duration
@@ -171,19 +180,45 @@ type CommandRunner struct {
 // Name implements Runner.
 func (r *CommandRunner) Name() string { return ProviderName }
 
-// Available implements Runner. The runner is available iff a command is
-// configured; it never executes the command.
+// Available implements Runner. It is a cheap, side-effect-free prerequisite
+// check; it never executes the command.
+//
+// It reports true only when a command is configured and its program resolves on
+// PATH. For the built-in helper it additionally requires the helper script and a
+// real model path to exist, because the helper cannot serve inference without
+// them.
 func (r *CommandRunner) Available(context.Context) bool {
-	return r != nil && len(r.Command) > 0
+	if r == nil || len(r.Command) == 0 {
+		return false
+	}
+	if _, err := exec.LookPath(r.Command[0]); err != nil {
+		return false
+	}
+	if r.HelperPath != "" {
+		if !fileExists(r.HelperPath) {
+			return false
+		}
+		if strings.TrimSpace(r.ModelPath) == "" || !fileExists(r.ModelPath) {
+			return false
+		}
+	}
+	return true
 }
 
 // Run implements Runner.
 //
 // It bounds the call with the configured Timeout, marshals in to stdin, decodes
 // stdout into Outputs, captures stderr for diagnostics, and forwards
-// JULIA_MODEL_PATH to the child environment. Failures are wrapped with
-// errRunnerUnavailable (command unset, start/exec failure, timeout) or
-// errRunnerMalformed (undecodable stdout) so the adapter can classify them.
+// JULIA_MODEL_PATH to the child environment.
+//
+// Failures are classified so the adapter can map them onto a decision.ErrorKind:
+//
+//   - command unset, start/exec failure, timeout -> errRunnerUnavailable
+//   - a helper that exits non-zero and reports kind "malformed" -> errRunnerMalformed
+//   - a helper that exits non-zero and reports kind "failure"  -> a generic error
+//     (the adapter maps it to decision.ErrProviderFailure)
+//   - an unclassified non-zero exit -> errRunnerUnavailable
+//   - undecodable stdout -> errRunnerMalformed
 func (r *CommandRunner) Run(ctx context.Context, in Inputs) (Outputs, error) {
 	if r == nil || len(r.Command) == 0 {
 		return Outputs{}, fmt.Errorf("%w: no inference command configured", errRunnerUnavailable)
@@ -213,10 +248,17 @@ func (r *CommandRunner) Run(ctx context.Context, in Inputs) (Outputs, error) {
 			return Outputs{}, fmt.Errorf("%w: inference command timed out after %s: %v", errRunnerUnavailable, timeout, ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
-		if msg != "" {
-			return Outputs{}, fmt.Errorf("%w: inference command failed: %v: %s", errRunnerUnavailable, err, msg)
+		switch decodeHelperErrorKind(stdout.Bytes()) {
+		case helperErrorMalformed:
+			return Outputs{}, fmt.Errorf("%w: inference helper reported malformed output: %v: %s", errRunnerMalformed, err, msg)
+		case helperErrorFailure:
+			return Outputs{}, fmt.Errorf("julia: inference failed: %v: %s", err, msg)
+		default:
+			if msg != "" {
+				return Outputs{}, fmt.Errorf("%w: inference command failed: %v: %s", errRunnerUnavailable, err, msg)
+			}
+			return Outputs{}, fmt.Errorf("%w: inference command failed: %v", errRunnerUnavailable, err)
 		}
-		return Outputs{}, fmt.Errorf("%w: inference command failed: %v", errRunnerUnavailable, err)
 	}
 
 	var out Outputs
@@ -224,6 +266,50 @@ func (r *CommandRunner) Run(ctx context.Context, in Inputs) (Outputs, error) {
 		return Outputs{}, fmt.Errorf("%w: decode runner output: %v", errRunnerMalformed, err)
 	}
 	return out, nil
+}
+
+// helperErrorKind classifies an error the inference helper reported on stdout.
+type helperErrorKind int
+
+const (
+	// helperErrorNone means no machine-readable error envelope was present.
+	helperErrorNone helperErrorKind = iota
+	// helperErrorUnavailable maps onto errRunnerUnavailable.
+	helperErrorUnavailable
+	// helperErrorMalformed maps onto errRunnerMalformed.
+	helperErrorMalformed
+	// helperErrorFailure maps onto a generic decision.ErrProviderFailure.
+	helperErrorFailure
+)
+
+// runnerErrorEnvelope is the optional machine-readable error the inference
+// helper may emit on stdout when it fails. It lets the adapter classify a helper
+// failure precisely instead of defaulting every non-zero exit to "unavailable".
+// stdout remains the single machine-readable channel; diagnostics stay on
+// stderr.
+type runnerErrorEnvelope struct {
+	Error *struct {
+		Kind    string `json:"kind"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// decodeHelperErrorKind inspects a failed helper's stdout for an error envelope.
+func decodeHelperErrorKind(stdout []byte) helperErrorKind {
+	var env runnerErrorEnvelope
+	if err := json.Unmarshal(stdout, &env); err != nil || env.Error == nil {
+		return helperErrorNone
+	}
+	switch env.Error.Kind {
+	case "malformed":
+		return helperErrorMalformed
+	case "unavailable":
+		return helperErrorUnavailable
+	case "failure":
+		return helperErrorFailure
+	default:
+		return helperErrorNone
+	}
 }
 
 // childEnv returns the environment for the inference command: the current

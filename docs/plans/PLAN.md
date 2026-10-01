@@ -95,44 +95,62 @@ installed Nimble; a manual CLI request returns all requested answers.
 
 ## Phase 2 — Julia
 
-**State: PARTIAL — adapter complete; concrete ONNX runtime binding deferred.**
+**State: PARTIAL — adapter + repo-owned ONNX execution path complete; live
+validation pending an operator-supplied Julia-1-ONNX model.**
 
 **Goal:** adapt Julia (ONNX) to the Phase 1.1 decision contract **without
 changing that contract** unless a genuine provider-neutral deficiency is found.
 
-What shipped (adapter + configurable Runner seam + offline tests + CLI
-selection):
+What shipped (adapter + repo-owned helper + offline tests + CLI selection):
 
-- `internal/providers/julia` adapts `DecisionRequest` to a provider-neutral
-  `Inputs` structure and normalizes raw `Outputs` back into a
-  `decision.DecisionResult`; the public contract is unchanged.
+- `internal/providers/julia` adapts `DecisionRequest` to a Julia runtime request
+  and normalizes raw `Outputs` back into a `decision.DecisionResult`; the public
+  contract is unchanged.
 - The concrete ONNX execution is isolated behind the `Runner` interface
-  (`Name`/`Available`/`Run`). A stdlib-only `CommandRunner`
-  (`JULIA_INFERENCE_CMD`, JSON-in/JSON-out, context timeout, stderr capture,
-  `JULIA_MODEL_PATH` forwarding) is the placeholder implementation; a `RunnerFunc`
-  adapter makes tests trivial.
-- Configuration via `JULIA_MODEL`, `JULIA_MODEL_PATH`, `JULIA_INFERENCE_CMD`,
-  `JULIA_TIMEOUT` (`internal/providers/julia/config.go`).
+  (`Name`/`Available`/`Run`). `CommandRunner` runs the **repository-owned** helper
+  `tools/julia/infer.py` by default (`JULIA_PYTHON`, JSON-in/JSON-out, context
+  timeout, stderr capture, `JULIA_MODEL_PATH` forwarding, helper error envelope
+  classification); `JULIA_INFERENCE_CMD` overrides it; a `RunnerFunc` adapter
+  makes tests trivial.
+- **Julia native semantics** (`semantics.go`): qtype mapping (choice 0, score 1,
+  noul/boolean 2), the 2–20 option limit enforced locally, ordered options from
+  `Choices`, and fixed `["false","true"]` boolean options.
+- **Repo-owned helper** (`tools/julia/`): tokenizer → ONNX tensors
+  (`input_ids`, `attention_mask`, `marker_pos`, `marker_mask`, `qtype`) →
+  Julia-1-ONNX → `logits`; validates logits, applies stable softmax, decodes by
+  qtype (choice `argmax`, score expected zero-based index, boolean `P(true)`),
+  and never fabricates confidence.
+- Configuration via `JULIA_MODEL`, `JULIA_MODEL_PATH`, `JULIA_PYTHON`,
+  `JULIA_INFERENCE_CMD`, `JULIA_TIMEOUT` (`internal/providers/julia/config.go`),
+  with helper-side `JULIA_TOKENIZER_PATH`, `JULIA_MODEL_ID`, `JULIA_MAX_TOKENS`.
 - Error normalization mirrors Nimble: request problems → `ErrInvalidRequest`,
-  unreachable/unconfigured runner → `ErrUnavailable`, undecodable or
+  unreachable/unconfigured/helper-unavailable → `ErrUnavailable`, undecodable or
   non-normalizable output → `ErrMalformedResponse`, anything else →
   `ErrProviderFailure`.
 - Offline test suite (`translate_test.go`, `config_test.go`, `julia_test.go`,
-  `runner_test.go`) plus fixtures under `tests/fixtures/julia/`. No ONNX, Julia,
-  Ollama, or network is required.
+  `runner_test.go`) plus standard-library helper tests
+  (`tools/julia/test_infer.py`) and fixtures under `tests/fixtures/julia/`. No
+  ONNX, Julia, Python, Ollama, or network is required.
 - CLI: `decide -provider julia -file tests/fixtures/risk-evaluation.json`.
+- Opt-in live test `tests/integration_julia_test.go` (`JULIA_INTEGRATION_TEST=1`)
+  drives Go → helper → ONNX Runtime → Julia-1-ONNX; it SKIPS when the runtime is
+  not configured.
 
 What remains:
 
+- **Live validation** against a real Julia-1-ONNX model (requires an
+  operator-supplied model + helper dependencies; not available in CI/dev here).
+- **Upstream encoder verification.** The encoding of state/question/options into
+  `marker_pos`/`marker_mask` is a best-effort, isolated implementation that must
+  be reconciled with the upstream Julia-1-ONNX export.
 - A concrete **in-process ONNX binding** that satisfies the same `Runner`
-  interface (tracked in [`BACKLOG.md`](BACKLOG.md)). Until then live validation
-  requires an operator-provided inference command/runtime via
-  `JULIA_INFERENCE_CMD`.
+  interface (tracked in [`BACKLOG.md`](BACKLOG.md)).
 
-Exit criteria (met for the adapter): the same fixtures produce valid
-`DecisionResult`s through the Runner seam; no Julia/ONNX and no SystemOne-specific
-types leak into the public `decision` package. Nimble remains the reference
-implementation against which Julia is tested.
+Exit criteria (met for the adapter + execution path): the same fixtures produce
+valid `DecisionResult`s through the Runner seam; no Julia/ONNX and no
+SystemOne-specific types leak into the public `decision` package; the default
+suite stays fully offline. Nimble remains the reference implementation against
+which Julia is tested.
 
 ---
 

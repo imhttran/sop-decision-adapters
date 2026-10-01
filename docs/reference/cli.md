@@ -13,33 +13,33 @@ sop-decision-adapter <command> [flags]
 
 ## Commands
 
-| Command               | Description                                                                |
-| --------------------- | -------------------------------------------------------------------------- |
-| `decide`              | Evaluate a `DecisionRequest` through a provider and print the result.       |
-| `help`, `-h`, `--help`| Print usage.                                                               |
+| Command                | Description                                                           |
+| ---------------------- | --------------------------------------------------------------------- |
+| `decide`               | Evaluate a `DecisionRequest` through a provider and print the result. |
+| `help`, `-h`, `--help` | Print usage.                                                          |
 
 ## `decide` flags
 
-| Flag           | Default                | Description                                                                 |
-| -------------- | ---------------------- | --------------------------------------------------------------------------- |
-| `-provider`    | `nimble`               | Provider to use: `nimble` or `julia`. Unknown names error with the available list. |
-| `-file`        |                        | Path to a JSON `DecisionRequest` (multi-question). Takes precedence over the flag form. |
-| `-state`       |                        | Free-form state/context (single-question form).                             |
-| `-choices`     |                        | Comma-separated allowed choices (single-question form). Required when `-file` is unset. |
-| `-decision-id` | `example`              | Question ID for the single-question form.                                   |
-| `-base-url`    | env `OLLAMA_BASE_URL`  | Nimble provider base URL.                                                   |
-| `-model`       | env `NIMBLE_MODEL` / `JULIA_MODEL` | Model name.                                                      |
-| `-timeout`     | `30s`                  | Per-request timeout.                                                        |
-| `-json`        | `false`                | Print the result as indented JSON.                                          |
+| Flag           | Default                            | Description                                                                             |
+| -------------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
+| `-provider`    | `nimble`                           | Provider to use: `nimble` or `julia`. Unknown names error with the available list.      |
+| `-file`        |                                    | Path to a JSON `DecisionRequest` (multi-question). Takes precedence over the flag form. |
+| `-state`       |                                    | Free-form state/context (single-question form).                                         |
+| `-choices`     |                                    | Comma-separated allowed choices (single-question form). Required when `-file` is unset. |
+| `-decision-id` | `example`                          | Question ID for the single-question form.                                               |
+| `-base-url`    | env `OLLAMA_BASE_URL`              | Nimble provider base URL.                                                               |
+| `-model`       | env `NIMBLE_MODEL` / `JULIA_MODEL` | Model name.                                                                             |
+| `-timeout`     | `30s`                              | Per-request timeout.                                                                    |
+| `-json`        | `false`                            | Print the result as indented JSON.                                                      |
 
 ## Exit codes
 
-| Code | Meaning                                                                 |
-| ---- | ----------------------------------------------------------------------- |
-| `0`  | Success.                                                                 |
-| `1`  | Provider failure (`ErrProviderFailure` / `ErrMalformedResponse`).        |
-| `2`  | Invalid request, usage error, or unsupported input.                     |
-| `3`  | Provider unavailable (`ErrUnavailable`).                                |
+| Code | Meaning                                                           |
+| ---- | ----------------------------------------------------------------- |
+| `0`  | Success.                                                          |
+| `1`  | Provider failure (`ErrProviderFailure` / `ErrMalformedResponse`). |
+| `2`  | Invalid request, usage error, or unsupported input.               |
+| `3`  | Provider unavailable (`ErrUnavailable`).                          |
 
 If the provider is not available, a warning is written to stderr but the decision
 is still attempted.
@@ -53,8 +53,17 @@ sop-decision-adapter decide -provider nimble \
   -file tests/fixtures/risk-evaluation.json -json
 ```
 
-The Julia provider needs an inference command (`JULIA_INFERENCE_CMD`); with none
-configured it reports unavailable.
+The Julia provider runs the repository-owned helper `tools/julia/infer.py` by
+default; set `JULIA_MODEL_PATH` to the ONNX model (and `JULIA_PYTHON` if not
+`python3`). With no model configured it reports unavailable.
+
+```sh
+JULIA_MODEL_PATH=/path/to/julia-1.onnx \
+  sop-decision-adapter decide -provider julia \
+  -file tests/fixtures/risk-evaluation.json -json
+```
+
+An operator may override the command entirely:
 
 ```sh
 JULIA_INFERENCE_CMD="my-onnx-runner --model julia.onnx" \

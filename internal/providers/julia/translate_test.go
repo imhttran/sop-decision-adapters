@@ -2,6 +2,7 @@ package julia
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/imhttran/sop-decision-adapters/decision"
@@ -127,7 +128,7 @@ func TestBuildInputs(t *testing.T) {
 	}
 }
 
-func TestBuildInputsCopiesChoiceLabels(t *testing.T) {
+func TestBuildInputsOptionsAndQType(t *testing.T) {
 	got, err := BuildInputs(exampleRequest())
 	if err != nil {
 		t.Fatalf("BuildInputs() error = %v", err)
@@ -136,14 +137,108 @@ func TestBuildInputsCopiesChoiceLabels(t *testing.T) {
 	for _, qi := range got.Questions {
 		byID[qi.ID] = qi
 	}
-	if labels := byID["risk"].Labels; len(labels) != 3 {
-		t.Fatalf("risk Labels = %v, want 3 labels", labels)
+
+	risk := byID["risk"]
+	if risk.Type != decision.QuestionChoice {
+		t.Errorf("risk Type = %q, want choice", risk.Type)
 	}
-	if byID["risk"].Type != decision.QuestionChoice {
-		t.Errorf("risk Type = %q, want choice", byID["risk"].Type)
+	if risk.QType != juliaQTypeChoice {
+		t.Errorf("risk QType = %d, want %d", risk.QType, juliaQTypeChoice)
 	}
-	if labels := byID["approval_required"].Labels; len(labels) != 0 {
-		t.Errorf("boolean Labels = %v, want none", labels)
+	if want := []string{"LOW", "MEDIUM", "HIGH"}; !reflect.DeepEqual(risk.Options, want) {
+		t.Errorf("risk Options = %v, want %v", risk.Options, want)
+	}
+
+	approval := byID["approval_required"]
+	if approval.QType != juliaQTypeBoolean {
+		t.Errorf("approval_required QType = %d, want %d", approval.QType, juliaQTypeBoolean)
+	}
+	if want := []string{"false", "true"}; !reflect.DeepEqual(approval.Options, want) {
+		t.Errorf("approval_required Options = %v, want %v", approval.Options, want)
+	}
+}
+
+func TestBuildInputsCopiesOptions(t *testing.T) {
+	// BuildInputs must not alias the caller's Choices slice.
+	req := exampleRequest()
+	got, err := BuildInputs(req)
+	if err != nil {
+		t.Fatalf("BuildInputs() error = %v", err)
+	}
+	for i, qi := range got.Questions {
+		if qi.ID != "risk" {
+			continue
+		}
+		got.Questions[i].Options[0] = "MUTATED"
+	}
+	if req.Questions[0].Choices[0] != "LOW" {
+		t.Errorf("BuildInputs aliased caller Choices: %v", req.Questions[0].Choices)
+	}
+}
+
+func TestBuildInputsOptionLimits(t *testing.T) {
+	choices := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = string(rune('A' + i))
+		}
+		return out
+	}
+
+	tests := map[string]struct {
+		qtype decision.QuestionType
+		n     int
+		ok    bool
+	}{
+		"choice 1 option rejected":   {qtype: decision.QuestionChoice, n: 1, ok: false},
+		"choice 2 options accepted":  {qtype: decision.QuestionChoice, n: 2, ok: true},
+		"choice 20 options accepted": {qtype: decision.QuestionChoice, n: 20, ok: true},
+		"choice 21 options rejected": {qtype: decision.QuestionChoice, n: 21, ok: false},
+		"score 1 option rejected":    {qtype: decision.QuestionScore, n: 1, ok: false},
+		"score 2 options accepted":   {qtype: decision.QuestionScore, n: 2, ok: true},
+		"score 20 options accepted":  {qtype: decision.QuestionScore, n: 20, ok: true},
+		"score 21 options rejected":  {qtype: decision.QuestionScore, n: 21, ok: false},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			req := decision.DecisionRequest{
+				State: "s",
+				Questions: []decision.Question{{
+					ID:       "q",
+					Type:     tt.qtype,
+					Criteria: "criteria",
+					Choices:  choices(tt.n),
+				}},
+			}
+			_, err := BuildInputs(req)
+			if tt.ok {
+				if err != nil {
+					t.Fatalf("BuildInputs() error = %v, want success", err)
+				}
+				return
+			}
+			if !errors.Is(err, decision.ErrInvalidRequest) {
+				t.Fatalf("error = %v, want ErrInvalidRequest", err)
+			}
+		})
+	}
+}
+
+func TestBuildInputsBooleanNeedsNoOptions(t *testing.T) {
+	req := decision.DecisionRequest{
+		State: "s",
+		Questions: []decision.Question{{
+			ID:   "approval_required",
+			Type: decision.QuestionBoolean,
+		}},
+	}
+	got, err := BuildInputs(req)
+	if err != nil {
+		t.Fatalf("BuildInputs() error = %v", err)
+	}
+	if want := []string{"false", "true"}; !reflect.DeepEqual(got.Questions[0].Options, want) {
+		t.Errorf("Options = %v, want %v", got.Questions[0].Options, want)
 	}
 }
 
@@ -219,9 +314,6 @@ func TestNormalizeOutputsRejections(t *testing.T) {
 		"boolean with no probability": {
 			mutate: func(o *Outputs) { o.Answers["approval_required"] = QuestionOutput{} },
 		},
-		"score with no value": {
-			mutate: func(o *Outputs) { o.Answers["risk"] = QuestionOutput{} },
-		},
 	}
 
 	for name, tt := range tests {
@@ -257,6 +349,38 @@ func TestNormalizeOutputsScoreQuestion(t *testing.T) {
 	}
 	if got.Answers["confidence_score"].Score != 7.5 {
 		t.Errorf("score = %+v", got.Answers["confidence_score"])
+	}
+}
+
+// TestNormalizeOutputsScoreMissingValue is a genuine SCORE malformed-output test:
+// a SCORE question whose answer carries no score must be rejected. (The previous
+// "score with no value" case mutated the risk CHOICE answer, so it never
+// exercised normalizeScoreAnswer.)
+func TestNormalizeOutputsScoreMissingValue(t *testing.T) {
+	req := decision.DecisionRequest{
+		State: "s",
+		Questions: []decision.Question{{
+			ID:       "confidence_score",
+			Type:     decision.QuestionScore,
+			Criteria: "Score the change",
+			Choices:  []string{"LOW", "MEDIUM", "HIGH"},
+		}},
+	}
+	out := Outputs{
+		Model:   "julia",
+		Answers: map[string]QuestionOutput{"confidence_score": {}},
+	}
+	_, err := NormalizeOutputs(out, req)
+	if !errors.Is(err, decision.ErrMalformedResponse) {
+		t.Fatalf("error = %v, want ErrMalformedResponse", err)
+	}
+}
+
+func TestNormalizeOutputsBooleanOutOfRange(t *testing.T) {
+	out := okOutputs()
+	out.Answers["approval_required"] = QuestionOutput{Probability: fptr(1.2)}
+	if _, err := NormalizeOutputs(out, exampleRequest()); !errors.Is(err, decision.ErrMalformedResponse) {
+		t.Fatalf("error = %v, want ErrMalformedResponse", err)
 	}
 }
 

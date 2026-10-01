@@ -13,39 +13,44 @@ func TestConfigFromEnv(t *testing.T) {
 	}{
 		"all unset uses defaults": {
 			env:  map[string]string{},
-			want: Config{Model: DefaultModel, Timeout: DefaultTimeout},
+			want: Config{Model: DefaultModel, Python: DefaultPython, Timeout: DefaultTimeout},
 		},
 		"model set": {
 			env:  map[string]string{"JULIA_MODEL": "julia-risk"},
-			want: Config{Model: "julia-risk", Timeout: DefaultTimeout},
+			want: Config{Model: "julia-risk", Python: DefaultPython, Timeout: DefaultTimeout},
+		},
+		"python set": {
+			env:  map[string]string{"JULIA_PYTHON": "python3.12"},
+			want: Config{Model: DefaultModel, Python: "python3.12", Timeout: DefaultTimeout},
 		},
 		"inference command split": {
 			env: map[string]string{"JULIA_INFERENCE_CMD": "python infer.py --model m.onnx"},
 			want: Config{
 				Model:        DefaultModel,
+				Python:       DefaultPython,
 				InferenceCmd: []string{"python", "infer.py", "--model", "m.onnx"},
 				Timeout:      DefaultTimeout,
 			},
 		},
 		"blank inference command unavailable": {
 			env:  map[string]string{"JULIA_INFERENCE_CMD": "   "},
-			want: Config{Model: DefaultModel, Timeout: DefaultTimeout},
+			want: Config{Model: DefaultModel, Python: DefaultPython, Timeout: DefaultTimeout},
 		},
 		"model path set": {
 			env:  map[string]string{"JULIA_MODEL_PATH": "/models/julia.onnx"},
-			want: Config{Model: DefaultModel, ModelPath: "/models/julia.onnx", Timeout: DefaultTimeout},
+			want: Config{Model: DefaultModel, ModelPath: "/models/julia.onnx", Python: DefaultPython, Timeout: DefaultTimeout},
 		},
 		"timeout set": {
 			env:  map[string]string{"JULIA_TIMEOUT": "5s"},
-			want: Config{Model: DefaultModel, Timeout: 5 * time.Second},
+			want: Config{Model: DefaultModel, Python: DefaultPython, Timeout: 5 * time.Second},
 		},
 		"invalid timeout falls back": {
 			env:  map[string]string{"JULIA_TIMEOUT": "not-a-duration"},
-			want: Config{Model: DefaultModel, Timeout: DefaultTimeout},
+			want: Config{Model: DefaultModel, Python: DefaultPython, Timeout: DefaultTimeout},
 		},
 		"non-positive timeout falls back": {
 			env:  map[string]string{"JULIA_TIMEOUT": "-5s"},
-			want: Config{Model: DefaultModel, Timeout: DefaultTimeout},
+			want: Config{Model: DefaultModel, Python: DefaultPython, Timeout: DefaultTimeout},
 		},
 	}
 
@@ -69,15 +74,15 @@ func TestConfigWithDefaults(t *testing.T) {
 	}{
 		"zero value": {
 			in:   Config{},
-			want: Config{Model: DefaultModel, Timeout: DefaultTimeout},
+			want: Config{Model: DefaultModel, Python: DefaultPython, Timeout: DefaultTimeout},
 		},
 		"preserves set values": {
-			in:   Config{Model: "custom", ModelPath: "/m.onnx", InferenceCmd: []string{"infer"}, Timeout: 3 * time.Second},
-			want: Config{Model: "custom", ModelPath: "/m.onnx", InferenceCmd: []string{"infer"}, Timeout: 3 * time.Second},
+			in:   Config{Model: "custom", ModelPath: "/m.onnx", Python: "python3.12", InferenceCmd: []string{"infer"}, Timeout: 3 * time.Second},
+			want: Config{Model: "custom", ModelPath: "/m.onnx", Python: "python3.12", InferenceCmd: []string{"infer"}, Timeout: 3 * time.Second},
 		},
 		"blank model and non-positive timeout": {
 			in:   Config{Model: "  ", Timeout: -1},
-			want: Config{Model: DefaultModel, Timeout: DefaultTimeout},
+			want: Config{Model: DefaultModel, Python: DefaultPython, Timeout: DefaultTimeout},
 		},
 	}
 

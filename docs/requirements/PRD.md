@@ -77,13 +77,13 @@ CLM, or JEV types through the contract.
 
 ## Initial providers
 
-| Provider          | Backend                                        | Phase |
-| ----------------- | ---------------------------------------------- | ----- |
-| **Nimble**        | Ollama → `/v1/systemone` → Nimble              | 1.1   |
+| Provider          | Backend                                        | Phase       |
+| ----------------- | ---------------------------------------------- | ----------- |
+| **Nimble**        | Ollama → `/v1/systemone` → Nimble              | 1.1         |
 | **Julia**         | ONNX inference behind a configurable Runner    | 2 (adapter) |
-| **CLM**           | CLM                                            | 3     |
-| **JEV / OpenJEV** | OpenJEV                                        | 3     |
-| **Shadow**        | wraps a primary + shadow provider (comparison) | 4     |
+| **CLM**           | CLM                                            | 3           |
+| **JEV / OpenJEV** | OpenJEV                                        | 3           |
+| **Shadow**        | wraps a primary + shadow provider (comparison) | 4           |
 
 Nimble is the reference implementation; its `/v1/systemone` mapping, availability
 check, and error normalization are specified in the
@@ -135,10 +135,12 @@ Phase 2 (Julia adapter) additionally satisfies:
     unchanged contract, isolating concrete ONNX execution behind a `Runner`
     interface and shipping no ONNX/Julia types through `decision`.
 11. The Julia adapter is selectable from the CLI (`decide -provider julia`) and
-    configurable via `JULIA_*`; a missing inference command reports unavailable
-    rather than failing silently.
-12. `go test ./...` covers the Julia adapter fully offline; a live path is
-    opt-in behind `JULIA_INTEGRATION_TEST=1` and `JULIA_INFERENCE_CMD`.
+    configurable via `JULIA_*`; by default it runs the repository-owned helper
+    (`tools/julia/infer.py`), and an unconfigured/missing model reports
+    unavailable rather than failing silently.
+12. `go test ./...` covers the Julia adapter fully offline; the helper's pure
+    functions have standard-library tests; a live path is opt-in behind
+    `JULIA_INTEGRATION_TEST=1` and SKIPS when no model is configured.
 
 ## Related documentation
 

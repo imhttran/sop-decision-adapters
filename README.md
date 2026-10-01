@@ -24,19 +24,21 @@ contract. Details: [decision contract](docs/specs/decision-contract.md).
 | ----- | ----------------------------------------------------- | ----------- |
 | 0     | Foundation — contract, CLI, fixtures, docs            | ✅ complete |
 | 1.1   | Native Nimble / SystemOne hardening (`/v1/systemone`) | ✅ complete |
-| 2     | Julia via ONNX (adapter + Runner seam)                | 🚧 partial  |
+| 2     | Julia via ONNX (adapter + repo-owned helper)          | 🚧 partial  |
 | 3     | CLM, JEV/OpenJEV                                      | ⏳ planned  |
 | 4     | Shadow evaluation / comparison                        | ⏳ planned  |
 
-Phase 2 ships the Julia adapter, configuration, a configurable `Runner` seam,
-offline tests, and CLI selection. The concrete in-process ONNX runtime binding
-remains deferred. Roadmap and exit criteria: [`docs/plans/PLAN.md`](docs/plans/PLAN.md).
+Phase 2 ships the Julia adapter, the repository-owned Python/ONNX helper
+(`tools/julia/`), configuration, offline tests, and CLI selection. Live
+validation still needs an operator-supplied Julia-1-ONNX model; an in-process
+ONNX binding remains deferred. Roadmap and exit criteria:
+[`docs/plans/PLAN.md`](docs/plans/PLAN.md).
 
 ## Architecture
 
 ```text
 agentic-sop ──▶ decision/ (public contract) ──▶ internal/providers/nimble ──▶ POST /v1/systemone
-                                              └ internal/providers/julia  ──▶ Runner ──▶ ONNX inference
+                                              └ internal/providers/julia  ──▶ Runner ──▶ tools/julia/infer.py ──▶ ONNX
 ```
 
 The contract lives in the **public** `decision` package, importable by another Go
@@ -51,17 +53,18 @@ Layering, responsibilities, and the SOP boundary:
 
 ## Providers
 
-| Provider | Backend                         | Config                          | Spec |
-| -------- | ------------------------------- | ------------------------------- | ---- |
-| `nimble` | Ollama `/v1/systemone`          | `OLLAMA_BASE_URL`, `NIMBLE_*`   | [spec](docs/specs/nimble-systemone.md) |
-| `julia`  | ONNX via a configurable Runner   | `JULIA_*`                       | [spec](docs/specs/julia-adapter.md) |
+| Provider | Backend                                 | Config                        | Spec                                   |
+| -------- | --------------------------------------- | ----------------------------- | -------------------------------------- |
+| `nimble` | Ollama `/v1/systemone`                  | `OLLAMA_BASE_URL`, `NIMBLE_*` | [spec](docs/specs/nimble-systemone.md) |
+| `julia`  | Julia-1-ONNX via `tools/julia/infer.py` | `JULIA_*`                     | [spec](docs/specs/julia-adapter.md)    |
 
 ## Layout
 
 ```text
 decision/                     PUBLIC provider-neutral contract
 internal/providers/nimble/    Nimble adapter (/v1/systemone transport, translation, provider)
-internal/providers/julia/     Julia adapter (Runner seam, translation, config, provider)
+internal/providers/julia/     Julia adapter (Runner seam, semantics, translation, config, provider)
+tools/julia/                  repo-owned Julia-1-ONNX inference helper (+ stdlib unit tests)
 cmd/sop-decision-adapter/     minimal CLI (decide)
 tests/fixtures/               example decision shapes + golden Nimble response + Julia fixtures
 docs/                         categorized documentation (index: docs/README.md)
@@ -82,15 +85,18 @@ export NIMBLE_MODEL=nimble
   -file tests/fixtures/risk-evaluation.json -json
 ```
 
-The Julia provider selects the external inference command via
-`JULIA_INFERENCE_CMD` (whitespace-split argv) and forwards `JULIA_MODEL_PATH`;
-with no command configured it reports unavailable.
+The Julia provider runs the repository-owned helper by default; point
+`JULIA_MODEL_PATH` at the model (and install the helper dependencies):
 
 ```sh
-export JULIA_INFERENCE_CMD="my-onnx-runner --model julia.onnx"
+pip install -r tools/julia/requirements.txt
+export JULIA_MODEL_PATH=/path/to/julia-1.onnx
 ./sop-decision-adapter decide -provider julia \
   -file tests/fixtures/risk-evaluation.json -json
 ```
+
+`JULIA_INFERENCE_CMD` overrides the helper entirely. Details:
+[`tools/julia/README.md`](tools/julia/README.md).
 
 Full walkthrough: [getting started](docs/guides/getting-started.md). Every flag:
 [CLI reference](docs/reference/cli.md). Environment:
@@ -105,9 +111,10 @@ live test validates the Nimble contract against a real backend:
 NIMBLE_INTEGRATION_TEST=1 go test ./...
 ```
 
-The Julia suite is fully offline; an opt-in live path runs only when
-`JULIA_INTEGRATION_TEST=1` and `JULIA_INFERENCE_CMD` are both set. See the
-[testing guide](docs/guides/testing.md).
+The Julia suite is fully offline; the helper's pure functions have their own
+standard-library tests (`python3 tools/julia/test_infer.py`). An opt-in live path
+runs only when `JULIA_INTEGRATION_TEST=1`, and skips when no model is configured.
+See the [testing guide](docs/guides/testing.md).
 
 ## Documentation
 

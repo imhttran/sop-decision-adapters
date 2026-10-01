@@ -237,10 +237,14 @@ Environment (nimble):
 
 Environment (julia):
   JULIA_MODEL          Julia model identifier (default "julia")
-  JULIA_MODEL_PATH     path to the ONNX model (forwarded to the inference command)
-  JULIA_INFERENCE_CMD  external inference command, whitespace-split into argv
-                       (empty => provider unavailable)
+  JULIA_MODEL_PATH     path to the ONNX model (required by the default helper;
+                       forwarded as JULIA_MODEL_PATH)
+  JULIA_PYTHON         interpreter for the default helper (default "python3")
+  JULIA_INFERENCE_CMD  optional inference command overriding the default helper
   JULIA_TIMEOUT        inference timeout (default 30s)
+
+  The default Julia path runs the repository-owned helper tools/julia/infer.py
+  via JULIA_PYTHON. Set JULIA_INFERENCE_CMD to override it with a custom command.
 
 Examples:
   sop-decision-adapter decide -provider nimble -file tests/fixtures/risk-evaluation.json

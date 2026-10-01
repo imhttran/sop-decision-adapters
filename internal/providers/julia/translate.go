@@ -10,18 +10,20 @@ import (
 // ProviderName is the stable identifier reported by this adapter.
 const ProviderName = "julia"
 
-// BuildInputs translates a provider-neutral DecisionRequest into the
-// provider-neutral model invocation handed to a Runner.
+// BuildInputs translates a provider-neutral DecisionRequest into the Julia
+// adapter/runtime request handed to a Runner.
 //
-// The mapping is one provider-neutral QuestionInput per question:
+// The mapping is one QuestionInput per question:
 //
+//   - QType is Julia's native question type (choice 0, score 1, noul/boolean 2).
 //   - Text uses the same fallback chain as the Nimble adapter:
 //     Instructions -> Criteria -> "Decide <id>."
-//   - Labels carries the question's allowed Choices (empty for non-choice
-//     questions).
+//   - Options carries the ordered Julia options: the question's Choices for
+//     CHOICE and SCORE, and Julia's fixed false/true options for BOOLEAN.
 //
-// Malformed requests are rejected with decision.ErrInvalidRequest before any
-// inference is attempted.
+// Julia-specific constraints (the 2..20 option limit) are enforced here, so a
+// request that is valid for the provider-neutral contract but not for Julia is
+// rejected with decision.ErrInvalidRequest before any inference is attempted.
 func BuildInputs(req decision.DecisionRequest) (Inputs, error) {
 	if err := req.Validate(); err != nil {
 		return Inputs{}, err
@@ -29,11 +31,20 @@ func BuildInputs(req decision.DecisionRequest) (Inputs, error) {
 
 	questions := make([]QuestionInput, 0, len(req.Questions))
 	for _, q := range req.Questions {
+		options, err := juliaOptions(q)
+		if err != nil {
+			return Inputs{}, err
+		}
+		qtype, err := juliaQType(q.Type)
+		if err != nil {
+			return Inputs{}, err
+		}
 		questions = append(questions, QuestionInput{
-			ID:     q.ID,
-			Type:   q.Type,
-			Text:   instructionsFor(q),
-			Labels: append([]string(nil), q.Choices...),
+			ID:      q.ID,
+			Type:    q.Type,
+			QType:   qtype,
+			Text:    instructionsFor(q),
+			Options: options,
 		})
 	}
 
@@ -66,6 +77,10 @@ func instructionsFor(q decision.Question) string {
 //   - BOOLEAN answers must carry a probability within [0, 1]
 //   - SCORE answers must carry a score
 //   - confidence, when present, must be within [0, 1]
+//
+// The response-shape rules above are the same for every provider; the Julia
+// request-side option-count limits are enforced by BuildInputs (and therefore by
+// Decide) on the way in, not here.
 //
 // Probabilities are not required to sum to 1.0. It returns errors wrapping
 // decision.ErrMalformedResponse.

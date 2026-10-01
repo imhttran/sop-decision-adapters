@@ -20,22 +20,37 @@ Deferred work. Nothing here is required for the current shipped phase.
 - [x] **Opt-in live integration test.** `NIMBLE_INTEGRATION_TEST=1 go test ./...`
       validates the contract against a real backend.
 - [x] **Julia provider adapter (Phase 2).** `internal/providers/julia` adapts
-      `DecisionRequest` to a provider-neutral `Inputs` structure and normalizes
-      raw `Outputs` back into a `decision.DecisionResult`. Concrete ONNX execution
-      is isolated behind the `Runner` seam, with a stdlib-only `CommandRunner`
-      driven by `JULIA_INFERENCE_CMD`. Ships with offline tests, fixtures under
-      `tests/fixtures/julia/`, and CLI selection (`decide -provider julia`). The
-      public contract is unchanged.
+      `DecisionRequest` to a Julia runtime request and normalizes raw `Outputs`
+      back into a `decision.DecisionResult`. Concrete ONNX execution is isolated
+      behind the `Runner` seam, with a stdlib-only `CommandRunner` that runs the
+      repository-owned helper `tools/julia/infer.py`. Ships with offline tests,
+      fixtures under `tests/fixtures/julia/`, and CLI selection
+      (`decide -provider julia`). The public contract is unchanged.
+- [x] **Julia-1-ONNX execution path (Phase 2.1).** Added the repo-owned Python/ONNX
+      helper (`tools/julia/infer.py`) with the documented tensor contract
+      (`input_ids`, `attention_mask`, `marker_pos`, `marker_mask`, `qtype` →
+      `logits`), stable softmax, logits validation, and qtype-correct decoding
+      (choice `argmax`, score expected index, boolean `P(true)`). Julia's native
+      qtype mapping and 2–20 option limit are enforced in Go
+      (`semantics.go`). Offline Go tests plus standard-library helper tests keep
+      the default suite dependency-free.
 
 ## Deferred — later phases
 
 - [ ] **Concrete in-process ONNX runtime binding for Julia.** The Julia adapter
-      ships with a configurable `Runner` seam and an external `CommandRunner`
-      (`JULIA_INFERENCE_CMD`). Replace/augment it with an in-process ONNX binding
-      that satisfies the same `Runner` interface (`Name`/`Available`/`Run`) so
-      live inference no longer requires an operator-provided command. Live
-      validation requires a real ONNX runtime/model; until then the default suite
-      stays offline. **Owner:** `internal/providers/julia`.
+      ships with a configurable `Runner` seam and the repo-owned `CommandRunner`
+      (running `tools/julia/infer.py`). Replace/augment it with an in-process ONNX
+      binding that satisfies the same `Runner` interface (`Name`/`Available`/`Run`)
+      so live inference no longer requires a helper process. **Owner:**
+      `internal/providers/julia`.
+- [ ] **Verify the Julia encoder against upstream.** The tensor contract and
+      decoding rules are implemented from the documented model contract, but the
+      encoding of state/question/options into `marker_pos`/`marker_mask`
+      (`Runtime.encode` in `tools/julia/infer.py`) is a best-effort, isolated
+      implementation that has **not** been reconciled with the upstream
+      Julia-1-ONNX export. Reconcile it before trusting live output, and capture a
+      real golden fixture (`tests/fixtures/julia/`) with recorded provenance.
+      **Owner:** `tools/julia`, `internal/providers/julia`.
 - [ ] **First-class score-scale representation.** SystemOne `score` questions
       require `criteria` to be an array of 2–26 candidate descriptions; a string or
       a 0/1-element array is rejected with HTTP 400. The provider-neutral
@@ -44,6 +59,12 @@ Deferred work. Nothing here is required for the current shipped phase.
       `decision.ErrInvalidRequest` when fewer than two candidates are supplied).
       Add a first-class score-scale representation to the provider-neutral contract
       so score candidates no longer have to ride along in `Choices`.
+- [ ] **Distinct BOOLEAN false/true descriptions.** The provider-neutral BOOLEAN
+      question carries no separate descriptions for its false and true options, so
+      the Julia adapter always sends `["false", "true"]` as noul options and
+      cannot pass caller-supplied false/true criteria. Preserving them requires a
+      change to the public contract and is deferred. **Owner:** `decision`,
+      `internal/providers/julia`.
 - [ ] **CLM, JEV/OpenJEV providers (Phase 3)**.
 - [ ] **Provider registry** — dynamic provider discovery/selection.
 - [ ] **Shadow evaluation (Phase 4)** — run a second provider for observation

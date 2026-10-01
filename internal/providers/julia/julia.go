@@ -30,15 +30,22 @@ type Provider struct {
 }
 
 // New builds a Julia provider. A nil runner defaults to a CommandRunner built
-// from cfg's inference command, which is convenient in production and stubbed in
-// tests.
+// from cfg: the repository-owned helper (tools/julia/infer.py, run with
+// JULIA_PYTHON) unless cfg.InferenceCmd overrides it. Tests pass a stub runner.
 func New(cfg Config, runner Runner) *Provider {
 	cfg = cfg.WithDefaults()
 	if runner == nil {
+		command := cfg.InferenceCmd
+		helperPath := ""
+		if len(command) == 0 {
+			helperPath = resolveHelperPath()
+			command = []string{cfg.Python, helperPath}
+		}
 		runner = &CommandRunner{
-			Command:   cfg.InferenceCmd,
-			ModelPath: cfg.ModelPath,
-			Timeout:   cfg.Timeout,
+			Command:    command,
+			ModelPath:  cfg.ModelPath,
+			HelperPath: helperPath,
+			Timeout:    cfg.Timeout,
 		}
 	}
 	return &Provider{cfg: cfg, runner: runner}
@@ -54,18 +61,18 @@ func (p *Provider) Name() string { return ProviderName }
 
 // Available implements decision.Provider.
 //
-// It delegates to the runner, which reports whether inference can currently be
-// served (for example whether an inference command is configured). It never
-// performs an inference request.
+// It delegates to the runner, which cheaply reports whether inference can
+// currently be served (for example whether the helper, interpreter, and model
+// exist). It never performs an inference request.
 func (p *Provider) Available(ctx context.Context) bool {
 	return p.runner.Available(ctx)
 }
 
 // Decide implements decision.Provider.
 //
-// It validates the request, translates it into the provider-neutral model
-// Inputs, executes the runner, and normalizes the raw Outputs back into a
-// provider-neutral decision.DecisionResult.
+// It validates the request, translates it into the Julia runtime request, executes
+// the runner, and normalizes the raw Outputs back into a provider-neutral
+// decision.DecisionResult.
 //
 // The runner-reported model takes precedence. When the runner reports none, the
 // configured model (JULIA_MODEL) is reported instead.
