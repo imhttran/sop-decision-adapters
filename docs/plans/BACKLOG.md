@@ -1,0 +1,66 @@
+# BACKLOG — sop-decision-adapters
+
+Deferred work. Nothing here is required for the current shipped phase.
+
+## Completed
+
+- [x] **Live Nimble response verification.** A real response was captured from a
+      locally installed Ollama + Nimble instance over `POST /v1/systemone` and
+      committed as `tests/fixtures/nimble/systemone_response.json`. The production
+      parser is tested against it (Phase 1.1).
+- [x] **Native SystemOne decision transport.** Replaced the prompt-based
+      `/api/generate` path with `POST /v1/systemone`; prompt-building and
+      Markdown-fence extraction removed.
+- [x] **Public decision contract.** `internal/decision/` promoted to the
+      importable `decision/` package
+      (`github.com/imhttran/sop-decision-adapters/decision`) with multi-question
+      requests and typed CHOICE/BOOLEAN/SCORE answers.
+- [x] **Golden fixtures.** `tests/fixtures/nimble/systemone_response.json` plus a
+      multi-question CLI example (`tests/fixtures/risk-evaluation.json`).
+- [x] **Opt-in live integration test.** `NIMBLE_INTEGRATION_TEST=1 go test ./...`
+      validates the contract against a real backend.
+
+## Deferred — later phases
+
+- [ ] **First-class score-scale representation.** SystemOne `score` questions
+      require `criteria` to be an array of 2–26 candidate descriptions; a string or
+      a 0/1-element array is rejected with HTTP 400. The provider-neutral
+      `decision.Question` has no dedicated score-scale field yet, so the Nimble
+      adapter maps score candidates from the existing `Choices` field (and returns
+      `decision.ErrInvalidRequest` when fewer than two candidates are supplied).
+      Add a first-class score-scale representation to the provider-neutral contract
+      so score candidates no longer have to ride along in `Choices`.
+- [ ] **Julia provider (Phase 2)** — adapt Julia/ONNX to the Phase 1.1 decision
+      contract without changing it unless a genuine provider-neutral deficiency is
+      found.
+- [ ] **CLM, JEV/OpenJEV providers (Phase 3)**.
+- [ ] **Provider registry** — dynamic provider discovery/selection.
+- [ ] **Shadow evaluation (Phase 4)** — run a second provider for observation
+      only; never affect execution.
+- [ ] **agentic-sop integration** — consume the public `decision` package from
+      `agentic-sop` (kept out of the adapter repository).
+
+## Follow-ups — tooling / environment
+
+- [ ] **Stale `SOP_AGENT_*` environment in the SOP session.** The shell exports
+      `SOP_AGENT_PROVIDER=command` and
+      `SOP_AGENT_COMMAND=sh scripts/sop-deepseek-agent.sh`, but that harness was
+      removed in `agentic-sop` TASK-058 and replaced by the capability-aware
+      `sop-ollama-agent` (`agentic-sop/scripts/agents/sop-ollama-agent.sh`,
+      installed at `~/.local/share/sop/bin/sop-ollama-agent`). A raw `sop prompt`
+      therefore fails with
+      `sh: scripts/sop-deepseek-agent.sh: No such file or directory` before any work
+      runs.
+  - **Remediation:** unset `SOP_AGENT_PROVIDER` / `SOP_AGENT_COMMAND` so SOP uses
+    this project's configured native harness (`harness: tool`,
+    `provider: ollama` in `.agent-sdlc/config.yaml`), or point
+    `SOP_AGENT_COMMAND` at `agentic-sop/scripts/agents/sop-ollama-agent.sh`.
+  - **Note:** the installed command-agent binary is pinned to a revision that
+    predates `SOP_OLLAMA_IMPLEMENT_ITERATIONS`, so raising the IMPLEMENT budget
+    requires the native harness path.
+  - **Owner:** operator environment / `agentic-sop`.
+
+## Explicitly out of scope
+
+MCP, database, web UI, and a generic plugin framework are not planned for the
+adapter layer. Standard library first.

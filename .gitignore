@@ -1,0 +1,16 @@
+# Build output
+/bin/
+/sop-decision-adapter
+cmd/sop-decision-adapter/sop-decision-adapter
+
+# Local environment
+.env
+
+# Test and coverage artifacts
+*.out
+*.test
+coverage.txt
+
+# OS / editor noise
+.DS_Store
+*.swp
