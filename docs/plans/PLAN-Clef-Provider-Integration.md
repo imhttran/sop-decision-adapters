@@ -37,22 +37,24 @@ already-proven provider-neutral decision contract exposed by `agentic-sop`
 without introducing Clef-specific policy, lifecycle, approval, authorization,
 or execution-routing behavior into `agentic-sop`.
 
-The provider is reached through the provider-neutral JSON process boundary:
+The provider is reached through the existing in-process provider-neutral
+`decision.Provider` seam, selected through the existing `newProvider`
+construction-time switch in `cmd/sop-decision-adapter/main.go`:
 
 ```text
-agentic-sop
+agentic-sop (or any caller)
     |
-    | provider-neutral request DTO
+    | in-process decision.Provider
     v
-sop-decision-adapters serve
+internal/providers/clef
     |
-    | decision.Provider
+    | provider-specific transport
     v
-Clef adapter
-    |
-    v
-Clef runtime
+Clef runtime (/v1/systemone)
 ```
+
+A generic `sop-decision-adapters serve` + provider-neutral JSON process boundary is
+OUT OF SCOPE for this plan and may be handled by a future provider-runtime plan.
 
 The current evidence supports Ollama `POST /v1/systemone` with `clef-flash` as
 the primary verified Clef transport.
@@ -160,21 +162,22 @@ and without granting Clef any governance authority.
 ```text
 agentic-sop decision seam
         |
-        | provider-neutral JSON
-        v
-sop-decision-adapters serve
-        |
-        | local decision.Provider
+        | in-process decision.Provider
         v
 internal/providers/clef
         |
         | provider-specific transport
         v
-Clef runtime
+Clef runtime (/v1/systemone)
         |
         v
 decision evidence only
 ```
+
+The integration boundary is the existing in-process `decision.Provider` seam,
+selected through the existing `newProvider` switch in
+`cmd/sop-decision-adapter/main.go`. No separate `serve` command and no generic wire
+layer are part of this plan.
 
 SOP owns interpretation.
 
@@ -633,6 +636,306 @@ No semantic contract widening.
 
 ---
 
+## CLEF-011 — Register Clef in Provider Selection
+
+Make the existing `internal/providers/clef` package explicitly selectable through the existing
+in-process selection seam, OFF by default.
+
+### Dependencies
+
+- CLEF-004
+
+### Requires
+
+- Go build/test toolchain
+
+### Deliverables
+
+- `cmd/sop-decision-adapter/main.go` — a `clef` case in `newProvider` (the documented selection
+  seam) and the `availableProviders` list; explicit-opt-in wording in usage.
+
+### Acceptance Criteria
+
+- `-provider clef` constructs a Clef provider; an unknown provider still fails closed.
+- Clef is OFF unless `CLEF_ENABLED` is explicitly set.
+- No registry/factory/serve abstraction is introduced; existing nimble/julia selection is unchanged.
+- A focused test proves off-by-default and explicit selection.
+
+### Production-Change Scope
+
+Adapter-side CLI selection only.
+
+---
+
+## CLEF-016 — Clef Configuration and Capability Tests
+
+Prove offline that Clef configuration and capability reporting satisfy the provider-neutral
+contract. No real model is required.
+
+This is a bounded test-authoring task, not an architecture-discovery task. Bind the tests to
+the existing Clef production API and begin writing as soon as the authoritative inputs below
+(and, only if needed, the single named precedent) have been read.
+
+Authoritative inputs (read; do not modify):
+
+- `internal/providers/clef/config.go` — `ConfigFromEnv`, `Config{BaseURL,Model,Timeout,Enable}`,
+  `Config.Enabled`, `Config.WithDefaults`, `DefaultBaseURL`, `DefaultModel`, `DefaultTimeout`.
+- `internal/providers/clef/capability.go` — `Capability`, `(*Provider).Capability`, `Supports`,
+  `UnsupportedError`, `ErrUnsupported`.
+- `internal/providers/clef/clef.go` — only if a `ProviderName`/`New` reference is required.
+
+Mutation targets (create):
+
+- `internal/providers/clef/config_test.go`
+- `internal/providers/clef/capability_test.go`
+
+Allowed precedent (at most one; optional):
+
+- `internal/providers/nimble/config_test.go` — the `t.Setenv`-based hermetic
+  `ConfigFromEnv`/`WithDefaults` table pattern. Do not survey other providers.
+
+Execution contract:
+
+1. Read `config.go`, then `capability.go`.
+2. Read the single named precedent only if the test style is unclear.
+3. Create `config_test.go`, then `capability_test.go`.
+4. Run `go test ./internal/providers/clef/...`.
+5. Harden only failures attributable to this task.
+6. Run the required verification.
+7. Finish.
+
+After the authoritative inputs and the named precedent have been inspected, additional
+repository discovery is not part of normal execution; it requires naming the exact acceptance
+criterion that cannot otherwise be implemented. Do not inspect `transport.go`, `translate.go`,
+`internal/wire`, `cmd/`, or other providers — those belong to other tasks. The tests must
+remain offline (no network, no model).
+
+### Dependencies
+
+- CLEF-004
+
+### Requires
+
+- Go build/test toolchain
+
+### Deliverables
+
+- `internal/providers/clef/config_test.go`
+- `internal/providers/clef/capability_test.go`
+
+### Acceptance Criteria
+
+- `ConfigFromEnv` leaves Clef OFF by default (no `CLEF_ENABLED` ⇒ provider not enabled).
+- Explicit `CLEF_ENABLED` opt-in enables Clef; blank/non-positive values fall back to defaults.
+- Endpoint/model/timeout derive from `OLLAMA_BASE_URL`/`CLEF_MODEL`/`CLEF_TIMEOUT`.
+- Capability reporting returns UNSUPPORTED for operations Clef does not implement.
+- `go test ./...` remains fully offline.
+
+### Production-Change Scope
+
+Tests only.
+
+---
+
+## CLEF-012 — Clef Translation and Normalization Tests
+
+Prove offline that Clef request/response translation preserves provider-neutral semantics.
+
+This is a bounded test-authoring task, not an architecture-discovery task. Bind the tests to
+the existing Clef translation API and begin writing as soon as the authoritative inputs below
+(and, only if needed, the single named precedent) have been read.
+
+Authoritative inputs (read; do not modify):
+
+- `internal/providers/clef/translate.go` — `BuildSystemOneRequest`, `translateQuestion`,
+  `instructionsFor`, `NormalizeSystemOneResponse`, `normalizeAnswer`/`normalizeChoiceAnswer`/
+  `normalizeBooleanAnswer`/`normalizeScoreAnswer`, `inUnitRange`.
+- `internal/providers/clef/systemone.go` — the SystemOne request/response wire types the
+  translation reads and produces.
+- `decision/request.go` — `DecisionRequest`/`Question` field and validation semantics the
+  translation must cover.
+
+Mutation target (create):
+
+- `internal/providers/clef/translate_test.go`
+
+Allowed precedent (at most one; optional):
+
+- `internal/providers/nimble/translate_test.go` — `TestBuildSystemOneRequest*` /
+  `TestNormalizeSystemOneResponse*` shape. Do not survey other providers.
+
+Execution contract:
+
+1. Read `translate.go`, then `systemone.go`.
+2. Read the single named precedent only if the test style is unclear.
+3. Create `translate_test.go`.
+4. Run `go test ./internal/providers/clef/...`.
+5. Harden only failures attributable to this task.
+6. Run the required verification.
+7. Finish.
+
+After the authoritative inputs and the named precedent have been inspected, additional
+repository discovery is not part of normal execution; it requires naming the exact acceptance
+criterion that cannot otherwise be implemented. Do not inspect `transport.go`, `internal/wire`,
+`cmd/`, `agentic-sop`, or unrelated providers.
+
+### Dependencies
+
+- CLEF-016
+
+### Requires
+
+- Go build/test toolchain
+
+### Deliverables
+
+- `internal/providers/clef/translate_test.go`
+
+### Acceptance Criteria
+
+- Request translation covers every `DecisionRequest`/`Question` field.
+- Response normalization covers choice, score, and null-like forms.
+- Confidence and probabilities are bounded; NaN/Inf are rejected.
+- A choice outside the request's allowed set is rejected, not returned.
+- Indeterminate outcomes remain indeterminate.
+
+### Production-Change Scope
+
+Tests only.
+
+---
+
+## CLEF-013 — Clef Fake-Transport and Failure Tests
+
+Prove offline that Clef fails closed across transport and malformed-result conditions.
+
+This is a bounded test-authoring task, not an architecture-discovery task. Bind the tests to
+the existing Clef transport and provider-failure mapping and begin writing as soon as the
+authoritative inputs below (and, only if needed, the single named precedent) have been read.
+
+Authoritative inputs (read; do not modify):
+
+- `internal/providers/clef/transport.go` — the unexported `transport` interface, `httpTransport`,
+  `httpStatusError`, `malformedResponseError`, `isMalformedResponse`, `isUnavailable`.
+- `internal/providers/clef/clef.go` — `Provider.Decide`, `classifyTransportError`, `providerErr`
+  and the fail-closed `decision.ErrorKind` mapping.
+- `internal/providers/clef/systemone.go` — the wire types a fake transport returns.
+
+Mutation targets (create):
+
+- `internal/providers/clef/transport_test.go`
+- `internal/providers/clef/clef_test.go`
+
+Allowed precedent (at most one; optional):
+
+- `internal/providers/nimble/transport_test.go` — the `httptest`-server + failure/classification
+  pattern (`TestHTTPTransport*`, `TestClassifyTransportError`). Do not survey other providers.
+
+Execution contract:
+
+1. Read `transport.go`, then `clef.go`.
+2. Read the single named precedent only if the fake-transport style is unclear.
+3. Create `transport_test.go`, then `clef_test.go`.
+4. Run `go test ./internal/providers/clef/...`.
+5. Harden only failures attributable to this task (narrowly required implementation hardening
+   only; no contract widening).
+6. Run the required verification.
+7. Finish.
+
+After the authoritative inputs and the named precedent have been inspected, additional
+repository discovery is not part of normal execution; it requires naming the exact acceptance
+criterion that cannot otherwise be implemented. Do not inspect `translate.go`, `internal/wire`,
+`cmd/`, `agentic-sop`, or unrelated providers.
+
+### Dependencies
+
+- CLEF-012
+
+### Requires
+
+- Go build/test toolchain
+
+### Deliverables
+
+- `internal/providers/clef/transport_test.go`
+- `internal/providers/clef/clef_test.go`
+
+### Acceptance Criteria
+
+- A fake transport drives the provider without any real model.
+- Malformed, empty, timeout, and cancelled responses map to ERROR (never success).
+- Transport failure never yields a success-shaped result or successful evidence.
+- Unsupported operations return UNSUPPORTED; indeterminate outcomes stay indeterminate.
+- `go test ./...` remains fully offline.
+
+### Production-Change Scope
+
+Tests plus narrowly required implementation hardening only. No contract widening.
+
+---
+
+## CLEF-014 — Clef Governance-Boundary and Provider-Neutrality Tests
+
+Prove offline that Clef output carries no governance authority and no provider-specific type leaks
+into the neutral layer.
+
+This is a bounded test-authoring task, not an architecture-discovery task. It is implemented
+directly from the acceptance criteria and the existing Clef/`decision` surfaces below; no
+existing-provider precedent is required, and none is authorized.
+
+Authoritative inputs (read; do not modify):
+
+- `internal/providers/clef/clef.go` and `internal/providers/clef/capability.go` — the adapter's
+  outputs (`decision.DecisionResult`, `decision.ProviderError`, `Capability`) whose content must
+  carry no governance authority.
+- `decision/result.go`, `decision/errors.go`, `decision/provider.go` — the public neutral
+  surfaces that must contain no Clef-specific type or branch.
+
+Mutation targets (create):
+
+- `internal/providers/clef/governance_test.go`
+- a neutrality assertion (no Clef identifier in the public `decision` package)
+
+Execution contract:
+
+1. Read `clef.go`, `capability.go`, and the three `decision` files above.
+2. Create `governance_test.go` asserting the boundary directly from the acceptance criteria.
+3. Run `go test ./internal/providers/clef/...`.
+4. Harden only failures attributable to this task.
+5. Run the required verification.
+6. Finish.
+
+The neutrality assertion is bounded to the `decision/` package only. No broad architecture
+discovery is authorized, and the public `decision` contract must not be modified. Additional
+discovery requires naming the exact acceptance criterion that cannot otherwise be implemented.
+
+### Dependencies
+
+- CLEF-013
+
+### Requires
+
+- Go build/test toolchain
+
+### Deliverables
+
+- `internal/providers/clef/governance_test.go`
+- a neutrality search/assertion (no Clef identifier in the public `decision` package)
+
+### Acceptance Criteria
+
+- Provider output contains no authoritative CONTINUE/BLOCK/APPROVE/REJECT/COMMIT/MERGE, lifecycle
+  transition, or approval transition (literal domain data remains ordinary data).
+- No provider-specific type is added to the public `decision` package.
+- Provider-neutral surfaces contain no Clef-specific branch or identifier.
+- `go test ./...` remains fully offline.
+
+### Production-Change Scope
+
+Tests only.
+
+---
+
 ## CLEF-006 — Local Clef Runtime Verification
 
 Verify the implemented provider against a real local Clef runtime.
@@ -657,7 +960,8 @@ verified.
 
 ### Dependencies
 
-- CLEF-005
+- CLEF-011
+- CLEF-014
 
 ### Requires
 
@@ -887,7 +1191,8 @@ Verify:
 6. Clef cannot authorize commit or merge.
 7. Invalid evidence fails closed.
 8. Provider failure cannot produce authorization.
-9. Another provider can use the same wire contract.
+9. Providers are reached only through the existing in-process `decision.Provider`
+   seam; no separate serve/wire architecture is introduced.
 10. oMLX/Ollama/SystemOne details remain adapter-side.
 11. Decision-provider selection remains independent of SMALL/MEDIUM/LARGE
     routing.
@@ -983,9 +1288,9 @@ The report must explicitly answer:
 Record:
 
 - repository state;
-- CLEF-001..CLEF-010 evidence;
+- CLEF-001..CLEF-016 evidence;
 - verified transport;
-- provider-neutral wire contract;
+- in-process provider-neutral seam (`decision.Provider` selected via `newProvider`);
 - failure semantics;
 - governance boundary;
 - verification results;
@@ -1022,28 +1327,47 @@ None.
 
 ## Execution Policy
 
-Execute sequentially:
+Execute along the decomposed graph:
 
 ```text
-CLEF-001
+CLEF-001  (LOCAL_DONE)
     |
-CLEF-002
+CLEF-002  (LOCAL_DONE)
     |
-CLEF-003
+CLEF-003  (LOCAL_DONE)
     |
-CLEF-004
+CLEF-004  (LOCAL_DONE)
     |
-CLEF-005
-    |
-CLEF-006
-    |
-CLEF-007
-    |
-CLEF-008
-    |
-CLEF-009
-    |
-CLEF-010
+    +-----------------------------+
+    |                             |
+CLEF-011                     CLEF-016
+(provider registration)      (config + capability tests)
+                                  |
+                              CLEF-012
+                             (translation + normalization tests)
+                                  |
+                              CLEF-013
+                             (fake transport + failure tests)
+                                  |
+                              CLEF-014
+                             (governance + neutrality tests)
+    |                             |
+    +--------------+--------------+
+                   |
+                CLEF-006
+                   |
+                CLEF-007
+                   |
+                CLEF-008
+                   |
+                CLEF-009
+                   |
+                CLEF-010
+
+CLEF-005  (historical BLOCKED evidence of the superseded broad task; its definition
+           and execution history are preserved. It has no remaining dependents and
+           does not block continuation; its remaining scope is carried by the
+           decomposed tasks CLEF-016/CLEF-012/CLEF-013/CLEF-014.)
 ```
 
 Use truthful lifecycle states:
@@ -1088,8 +1412,8 @@ CLEF-009 -> CLEF-010
 A successful plan leaves `sop-decision-adapters` with a Clef provider that:
 
 - implements the existing adapter-side provider abstraction;
-- communicates with `agentic-sop` through the existing provider-neutral process
-  boundary;
+- is reached through the existing in-process provider-neutral `decision.Provider`
+  seam (selected via `newProvider`);
 - imports no SOP internal package;
 - emits evidence only;
 - validates choice and confidence;
