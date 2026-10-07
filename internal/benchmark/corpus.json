@@ -1,0 +1,75 @@
+{
+  "version": "clef-bench-v1",
+  "cases": [
+    {
+      "id": "bench-risk-auth-001",
+      "state": "A deploy pipeline is about to promote a build to production. The change modifies authentication middleware and session handling.",
+      "question": {
+        "id": "risk",
+        "type": "choice",
+        "criteria": "Deployment risk level",
+        "choices": ["LOW", "MEDIUM", "HIGH"]
+      },
+      "expected": "HIGH",
+      "ground_truth": true
+    },
+    {
+      "id": "bench-approval-schema-001",
+      "state": "A schema migration drops a column during business hours on the primary database.",
+      "question": {
+        "id": "approval",
+        "type": "choice",
+        "criteria": "Approve or reject the change",
+        "choices": ["APPROVE", "REJECT"]
+      },
+      "expected": "REJECT",
+      "ground_truth": true
+    },
+    {
+      "id": "bench-risk-docs-002",
+      "state": "A documentation-only change updates the README and inline comments with no executable code change.",
+      "question": {
+        "id": "risk",
+        "type": "choice",
+        "criteria": "Deployment risk level",
+        "choices": ["LOW", "MEDIUM", "HIGH"]
+      },
+      "expected": "LOW",
+      "ground_truth": true
+    },
+    {
+      "id": "bench-priority-001",
+      "state": "A background maintenance job intermittently fails without affecting user-facing traffic.",
+      "question": {
+        "id": "priority",
+        "type": "choice",
+        "criteria": "Issue priority",
+        "choices": ["P0", "P1", "P2"]
+      },
+      "ground_truth": false
+    },
+    {
+      "id": "bench-rollback-001",
+      "state": "A feature-flag flip increased the error rate for a small percentage of requests shortly after release.",
+      "question": {
+        "id": "action",
+        "type": "choice",
+        "criteria": "Recommended action",
+        "choices": ["ROLLBACK", "PROCEED"]
+      },
+      "ground_truth": false
+    },
+    {
+      "id": "bench-escalate-001",
+      "state": "A compliance reviewer must decide whether a flagged change needs escalation before release.",
+      "question": {
+        "id": "route",
+        "type": "choice",
+        "criteria": "Escalate or proceed",
+        "choices": ["ESCALATE", "PROCEED"]
+      },
+      "expected": "ESCALATE",
+      "ground_truth": true
+    }
+  ]
+}
