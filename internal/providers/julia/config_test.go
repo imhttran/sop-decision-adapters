@@ -7,6 +7,20 @@ import (
 )
 
 func TestConfigFromEnv(t *testing.T) {
+	// juliaEnvKeys are the keys ConfigFromEnv reads from the environment. They
+	// are neutralized (set to the empty string) before every subtest so the
+	// table is hermetic on hosts that export JULIA_* configuration (for example
+	// a workstation with a locally configured Julia provider). ConfigFromEnv
+	// treats empty values as unset, so the neutralized keys fall back to the
+	// documented defaults.
+	juliaEnvKeys := []string{
+		"JULIA_MODEL",
+		"JULIA_MODEL_PATH",
+		"JULIA_PYTHON",
+		"JULIA_INFERENCE_CMD",
+		"JULIA_TIMEOUT",
+	}
+
 	tests := map[string]struct {
 		env  map[string]string
 		want Config
@@ -56,6 +70,9 @@ func TestConfigFromEnv(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			for _, key := range juliaEnvKeys {
+				t.Setenv(key, "")
+			}
 			for key, val := range tt.env {
 				t.Setenv(key, val)
 			}
