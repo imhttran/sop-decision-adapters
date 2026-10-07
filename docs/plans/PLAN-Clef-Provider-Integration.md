@@ -237,7 +237,8 @@ completed dependencies belong in `Requires`.
 
 Establish the exact current state of `sop-decision-adapters`.
 
-Record:
+Inspect and record each of the following from the repository itself (source is
+authoritative; do not infer from documentation):
 
 - branch;
 - HEAD;
@@ -245,20 +246,25 @@ Record:
 - working-tree state;
 - Go toolchain;
 - build/test baseline;
-- provider interface;
-- request/result types;
-- existing adapters;
-- provider registration/factory;
-- configuration;
-- capability representation;
-- timeout/cancellation behavior;
-- process/HTTP abstractions;
-- tests;
-- relationship to `agentic-sop`.
+- the current provider interface;
+- the current request/result types;
+- existing provider implementations, including Nimble and Julia where present;
+- the repository's current provider registration/factory and CLI selection
+  mechanism;
+- configuration and provider enablement behavior;
+- the current capability representation;
+- current timeout/cancellation conventions;
+- current process/HTTP transport abstractions;
+- the existing test structure;
+- the current relationship to `agentic-sop`.
 
 Produce a current-state architecture diagram.
 
-Do not infer from documentation when source disagrees.
+Every item above is a discovery target that this task inspects and records; none is
+an externally supplied prerequisite. The repository working tree, its Go toolchain,
+its git metadata, and its documentation already exist in this checkout: record them
+as EXISTS, do not model them as MISSING or UNKNOWN, and do not create any stage that
+requires a capability this task exists to discover.
 
 ### Dependencies
 
@@ -275,14 +281,13 @@ None
 ### Acceptance Criteria
 
 - Repository state is recorded.
-- Provider interface and request/result types are identified with file/symbol
-  evidence.
-- Existing providers such as Nimble and Julia are identified.
-- Provider selection/registration is identified.
-- Configuration and enablement behavior are identified.
-- Timeout/cancellation conventions are identified.
-- Existing test structure is identified.
-- Relationship to `agentic-sop` is recorded.
+- The provider interface and request/result types are identified with file/symbol evidence.
+- Existing provider implementations, including Nimble and Julia where present, are inspected and recorded.
+- The current provider registration/factory and CLI selection mechanism is recorded.
+- Configuration and provider enablement behavior are recorded.
+- Timeout/cancellation conventions are recorded.
+- The existing test structure is recorded.
+- The relationship to `agentic-sop` is recorded.
 - A current-state diagram is included.
 - Documentation/source divergence is recorded.
 - No production code is changed.

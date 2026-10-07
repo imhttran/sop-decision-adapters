@@ -1,0 +1,40 @@
+{
+  "_capture": "omlx-static-route-survey",
+  "_provenance": "Transcribed from CLEF-architecture-analysis.md §3.3 and §4.1 (static inspection of the installed oMLX 0.7.0 app bundle; NOT a live probe of decision semantics). Transcribed in the CLEF-002 offline reporting environment; see report §0.1.",
+  "_bounded": true,
+  "_observed_live": false,
+  "_observed_in_environment": "prior captured environment (CLEF-architecture-analysis.md), static bundle inspection",
+  "environment": {
+    "runtime": "omlx",
+    "runtime_version": "0.7.0",
+    "binary": "/opt/homebrew/bin/omlx",
+    "server_command": "omlx serve (multi-model OpenAI-compatible server)",
+    "timestamp": "recorded-in-CLEF-architecture-analysis"
+  },
+  "openai_compatible_routes": [
+    "/v1/chat/completions",
+    "/v1/completions",
+    "/v1/embeddings",
+    "/v1/rerank",
+    "/v1/responses",
+    "/v1/messages",
+    "/v1/models",
+    "/v1/models/status",
+    "/v1/audio/*",
+    "/v1/mcp",
+    "/v1/web"
+  ],
+  "control_plane": "/api/* (large)",
+  "systemone_route_present": false,
+  "logprobs_supported": true,
+  "logprobs_note": "chat/completions appears to support logprobs/top_logprobs - the only plausible route to bounded-choice probabilities, but fidelity to Clef decision semantics is UNPROVEN.",
+  "model_references": {
+    "mlx-community/clef-4bit": "HF cache refs/main only; weights NOT materialized",
+    "mlx-community/clef-8bit": "HF cache refs/main only; weights NOT materialized"
+  },
+  "_classification": {
+    "native_decision_interface": "UNSUPPORTED (no /v1/systemone route)",
+    "faithful_translation": "UNKNOWN / REQUIRES EXPERIMENT",
+    "generic_generation_approximation": "PRESENT but NOT equivalent to Clef decision semantics"
+  }
+}

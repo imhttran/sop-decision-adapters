@@ -1,0 +1,26 @@
+{
+  "_capture": "ollama-show-clef-flash",
+  "_provenance": "Transcribed from CLEF-architecture-analysis.md §0 and §3.1 (output of `ollama show clef-flash`). Transcribed in the CLEF-002 offline reporting environment; see report §0.1.",
+  "_bounded": true,
+  "_observed_live": true,
+  "_observed_in_environment": "prior captured environment (CLEF-architecture-analysis.md)",
+  "environment": {
+    "runtime": "ollama",
+    "runtime_version": "0.40.0",
+    "command": "ollama show clef-flash",
+    "timestamp": "recorded-in-CLEF-architecture-analysis"
+  },
+  "model_metadata": {
+    "model": "clef-flash:latest",
+    "architecture": "clef",
+    "parameters": "9.5B",
+    "context_length": 262144,
+    "embedding_length": 4096,
+    "quantization": "mxfp8",
+    "capabilities": ["decision", "vision"]
+  },
+  "_demonstrates": [
+    "C7 context length (declared)"
+  ],
+  "_note": "Declared metadata, not exercised behavior. Vision (C6) is listed as a model capability but no image call was captured, so C6 remains UNKNOWN in the report."
+}
