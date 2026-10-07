@@ -4,13 +4,27 @@
 **Scope:** `sop-decision-adapters` only (adapter-side).\
 **Status:** PLANNED.\
 **Prerequisite:** `agentic-sop` Provider-Neutral Decision Integration Seam
-(SEAM-001..SEAM-008) is closed at **READY_WITH_NOTES** (0 CRITICAL, 0 HIGH,
-0 MEDIUM, 0 blocking residuals; L1--L6 are non-blocking notes). The cross-module
-contract is `agentic-sop` `docs/reports/decision-integration/SEAM-002-decision-contract.md`;
-the readiness decision is `SEAM-008-readiness-decision.md`; the adapter-side
-handoff is `docs/reports/clef-readiness/AS-CLEF-008-adapter-contract.md`. The
-design input is this repository's
-`docs/reports/clef-provider/CLEF-architecture-analysis.md`.
+(SEAM-001..SEAM-008) is closed at **READY_WITH_NOTES** with:
+
+- CRITICAL findings: 0
+- HIGH findings: 0
+- MEDIUM findings: 0
+- blocking residuals: 0
+
+The integration baseline is:
+
+`agentic-sop` HEAD:
+
+`11539138225a84a3bd476600cb1d1d8acabffc21`
+
+Authoritative inputs:
+
+- `agentic-sop/docs/reports/decision-integration/SEAM-002-decision-contract.md`
+- `agentic-sop/docs/reports/decision-integration/SEAM-008-readiness-decision.md`
+- `agentic-sop/docs/reports/clef-readiness/AS-CLEF-008-adapter-contract.md`
+- `docs/reports/clef-provider/CLEF-architecture-analysis.md`
+
+---
 
 ## Project
 
@@ -19,135 +33,232 @@ Clef Provider Integration
 ## Summary
 
 Implement a Clef decision provider in `sop-decision-adapters` that satisfies the
-already-proven, provider-neutral decision contract exposed by `agentic-sop`
-(SEAM-002), without any Clef-specific policy, lifecycle, approval, authorization,
-or execution-routing change in `agentic-sop`. The provider is reached over
-`agentic-sop`'s provider-neutral JSON process boundary: the adapter exposes a
-provider-neutral `serve` wire surface that reads the SEAM-002 request DTO on
-stdin and writes the SEAM-002 result DTO on stdout, and implements Clef behind the
-existing local `decision.Provider` abstraction. The design selects the **verified**
-Ollama `POST /v1/systemone` Clef decision transport (live-verified with
-`clef-flash`: choice + per-choice probabilities + confidence) as the primary
-transport, and treats the task-named `mlx-community/clef-4bit` + oMLX path as an
-**evaluation target / REQUIRES EXPERIMENT** (oMLX exposes only OpenAI-compatible
-generation/chat, not Clef's decision semantics). The work proceeds through ten
-sequential stages: repository truth (CLEF-001), Clef/oMLX capability and transport
-verification (CLEF-002), adapter-to-provider contract mapping (CLEF-003), provider
-implementation (CLEF-004), provider-contract and failure tests (CLEF-005), local
-runtime verification (CLEF-006), shadow evaluation harness (CLEF-007), benchmark
-and decision-quality comparison (CLEF-008), full verification and security review
-(CLEF-009), and the selectable-provider readiness decision (CLEF-010). Clef is
-OFF and non-default throughout; making it selectable or live requires separate
-evidence and human approval.
+already-proven provider-neutral decision contract exposed by `agentic-sop`
+without introducing Clef-specific policy, lifecycle, approval, authorization,
+or execution-routing behavior into `agentic-sop`.
+
+The provider is reached through the provider-neutral JSON process boundary:
+
+```text
+agentic-sop
+    |
+    | provider-neutral request DTO
+    v
+sop-decision-adapters serve
+    |
+    | decision.Provider
+    v
+Clef adapter
+    |
+    v
+Clef runtime
+```
+
+The current evidence supports Ollama `POST /v1/systemone` with `clef-flash` as
+the primary verified Clef transport.
+
+`mlx-community/clef-4bit` through oMLX remains an evaluation target and MUST NOT
+be treated as equivalent unless CLEF-002 demonstrates fidelity-preserving Clef
+decision semantics.
+
+Clef remains OFF and non-default throughout this plan.
+
+This plan may establish readiness for a later selectable-provider review, but
+does not itself authorize making Clef selectable, live, or default.
+
+---
+
+## Governing Invariants
+
+> Providers produce evidence. SOP determines what that evidence means.
+
+> Providers evaluate. SOP governs.
+
+Provider output is evidence only.
+
+Clef MUST NOT gain authority to:
+
+- transition task state;
+- transition plan state;
+- approve or reject work;
+- satisfy human approval;
+- authorize execution;
+- authorize commit;
+- authorize merge;
+- bypass validation;
+- bypass review;
+- select SOP lifecycle outcomes;
+- alter SMALL/MEDIUM/LARGE execution routing.
+
+---
 
 ## Capabilities
 
 ### Go build/test toolchain — EXISTS
 
-- Evidence: `go version` returns `go version go1.27.1 darwin/arm64`; `go build ./...`, `go vet ./...`, and `go test ./...` all pass offline at HEAD `a419ce5`.
-- Owner: operator-supplied development environment
-- Location: Go executable available on `PATH`
+Evidence: `go version go1.27.1 darwin/arm64`; baseline `go build ./...`, `go vet ./...`, and `go test ./...` pass offline at the planning baseline.
 
-### agentic-sop provider-neutral decision seam (SEAM-002) — EXISTS
+Owner: operator-supplied development environment.
 
-- Evidence: `agentic-sop` HEAD `11539138225a84a3bd476600cb1d1d8acabffc21` contains the seam (`internal/decision`, `internal/decision/command`, `internal/cli/decision_provider.go`); `SEAM-008-readiness-decision.md` records READY_WITH_NOTES; `SEAM-002-decision-contract.md` fixes the request/result DTO and validation ownership.
-- Owner: `agentic-sop` (external reference repository; read-only here)
-- Location: `~/agentic-workspace/agentic-sop`
+---
+
+### agentic-sop provider-neutral decision seam — EXISTS
+
+Evidence: `agentic-sop` HEAD `11539138225a84a3bd476600cb1d1d8acabffc21` provides the provider-neutral request/result boundary, fail-closed validation, SOP-owned evidence interpretation, a single policy path through `autonomy.Decide`, monotonic escalation, authoritative human approval, and provider-independent governance.
+
+Owner: `agentic-sop` (read-only for this plan).
+
+---
 
 ### Ollama SystemOne decision endpoint serving Clef — EXISTS
 
-- Evidence: Ollama `0.40.0` reachable at `http://localhost:11434`; `POST /v1/systemone` with `model: "clef-flash"` returned `{"type":"choice","choice":"HIGH","probabilities":{...},"confidence":0.6630}` and, for a second probe, `{"type":"score",...}` and `{"type":"noul","noul":0.8176}`; `ollama show clef-flash` reports capability `decision`.
-- Owner: operator-supplied local runtime
-- Location: `http://localhost:11434` (Ollama)
+Evidence: local Ollama exposes `clef-flash` with decision capability; `POST /v1/systemone` has produced bounded choice evidence with per-choice probabilities and confidence, and score and null-like operations have also been observed.
 
-### Apple-Silicon MLX runtime (oMLX) with clef-4bit — UNKNOWN
+CLEF-002 MUST reproduce and formally classify these capabilities before implementation depends on them.
 
-- Evidence: `omlx` `0.7.0` is installed and describes itself as an OpenAI-compatible server (no `/v1/systemone` route); `mlx-community/clef-4bit` is referenced in the HF cache but its weights are not materialized locally; whether a fidelity-preserving translation exists is not established.
-- Owner: operator-supplied local runtime and model artifact
-- Location: `/opt/homebrew/bin/omlx`; `~/.cache/huggingface/hub/models--mlx-community--clef-4bit`
+---
+
+### Apple Silicon MLX runtime / oMLX with clef-4bit — UNKNOWN
+
+Evidence: oMLX is available and exposes OpenAI-compatible generation/chat interfaces; `mlx-community/clef-4bit` is a candidate model; native Clef decision semantics equivalent to `/v1/systemone` have NOT been established.
+
+Status: UNKNOWN
+
+Gap: oMLX does not natively expose Clef decision semantics; whether a fidelity-preserving translation exists is not established.
+
+No implementation may assume compatibility; the capability REQUIRES EXPERIMENT.
+
+---
 
 ## Goal
 
-Make it possible for the live `agentic-sop` decision seam to consume a **Clef**
-decision provider from `sop-decision-adapters` as bounded **evidence**, without
-importing any `agentic-sop` Go type and without Clef gaining policy, lifecycle,
-approval, commit, or merge authority.
+Enable `sop-decision-adapters` to provide Clef-generated decision evidence to
+the live provider-neutral `agentic-sop` seam without importing SOP internals
+and without granting Clef any governance authority.
 
-Governing invariant:
-
-> Providers produce evidence. SOP determines what that evidence means.
-
-and
-
-> Providers evaluate. SOP governs.
+---
 
 ## Non-Goals
 
-- Do not implement Clef in `agentic-sop` or modify `agentic-sop` in any way.
-- Do not change the provider-neutral contract, SOP governance, SOP policy, or the
-  SMALL/MEDIUM/LARGE execution-model routing.
-- Do not add Clef, oMLX, Ollama, SystemOne, or any provider-specific branch to
-  `agentic-sop` policy.
-- Do not make Clef default, live, or selectable under this plan.
-- Do not redesign the proven provider-neutral seam; L1--L6 are non-blocking.
-- Do not assume oMLX exposes Ollama `/v1/systemone`, and do not treat
-  OpenAI-compatible chat output as equivalent to Clef's decision semantics.
-- Do not introduce provider-specific types into the public `decision` package.
-- Do not expand into general LLM benchmarking.
+- Do not modify `agentic-sop`.
+- Do not modify the provider-neutral contract.
+- Do not change SOP policy.
+- Do not change lifecycle semantics.
+- Do not change approval semantics.
+- Do not change authorization semantics.
+- Do not change SMALL/MEDIUM/LARGE routing.
+- Do not make Clef selectable, live, or default.
+- Do not assume oMLX provides SystemOne semantics.
+- Do not treat generic chat generation as equivalent to Clef decision semantics.
+- Do not introduce Clef-specific types into the public `decision` package.
+- Do not expand this project into general LLM benchmarking.
+
+---
 
 ## Architecture Invariant
 
-No `agentic-sop` subsystem depends on Clef, and no Clef output influences a SOP
-state transition. The desired boundary:
-
 ```text
-agentic-sop decision seam  (internal/decision/command, provider-neutral JSON)
-        |  request DTO (stdin)                     result DTO (stdout)
+agentic-sop decision seam
+        |
+        | provider-neutral JSON
         v
-sop-decision-adapters  serve  (provider-neutral SEAM-002 wire layer)
-        |  local decision.Provider
+sop-decision-adapters serve
+        |
+        | local decision.Provider
         v
-internal/providers/clef  (Clef transport, translation, capability handling)
+internal/providers/clef
+        |
+        | provider-specific transport
         v
-Ollama POST /v1/systemone  (verified)   |   oMLX OpenAI-compat (experiment only)
+Clef runtime
+        |
         v
-Clef  —  evidence only
+decision evidence only
 ```
 
-Provider output is evidence; SOP validation and `autonomy` policy determine what
-it means. With the capability disabled or no provider configured, existing SOP
-behavior is unchanged, and Clef remains OFF.
+SOP owns interpretation.
 
-## Planning and discovery constraint
+The adapter owns provider-specific transport and translation.
 
-Repository inspection and discovery performed by tasks in this plan are work to be
-performed by the task, not prerequisite capabilities. The following MUST NOT be
-modeled as required capabilities that must already be VERIFIED before a task may
-execute: repository/package inspection; provider-interface discovery;
-adapter/transport discovery; request/result-shape discovery; configuration/default
-discovery; capability/error discovery; test-location discovery; report creation or
-inspection of this repository or of the read-only `agentic-sop` reference.
+---
 
-These discovery targets may begin with status UNKNOWN; the task converts UNKNOWN
-into evidence-backed findings. A task may require a prerequisite capability only
-when it represents an actual externally supplied runtime, permission, tool,
-service, artifact, or completed dependency. Required report/plan paths are task
-outputs, not prerequisite capabilities. Completed artifacts (including the
-`agentic-sop` SEAM-002 contract) are evidence inputs, not capabilities requiring
-rediscovery.
+## Configuration Invariant
+
+Transport configuration and provider enablement are separate concerns.
+
+`CLEF_*` configuration may define:
+
+- endpoint;
+- model;
+- timeout;
+- transport parameters;
+- provider-specific options.
+
+Configuration defaults MUST NOT implicitly enable or select Clef.
+
+Clef MUST require an explicit operator selection/enablement action.
+
+Therefore:
+
+```text
+configured != enabled
+enabled != default
+selectable != default
+```
+
+No endpoint/model default may make Clef active by itself.
+
+---
+
+## Planning and Discovery Constraint
+
+Repository discovery performed inside a task is work performed by that task,
+not a prerequisite capability.
+
+The following MUST NOT be modeled as pre-verified capabilities:
+
+- repository inspection;
+- package discovery;
+- provider-interface discovery;
+- request/result-shape discovery;
+- configuration discovery;
+- capability discovery;
+- transport discovery;
+- test discovery;
+- report creation;
+- inspection of the read-only `agentic-sop` reference repository.
+
+Only externally supplied runtimes, permissions, tools, artifacts, or already
+completed dependencies belong in `Requires`.
 
 ---
 
 ## CLEF-001 — Capture Adapter Repository Truth
 
-Establish the exact current state of `sop-decision-adapters` before any change:
-record branch, HEAD, upstream relationship, working-tree state, Go toolchain, and
-the current build/test baseline; identify the provider interface, existing
-adapters (Nimble, Julia), provider registration/factory, configuration,
-request/result types, capability representation, timeout/cancellation
-conventions, tests, command/process/HTTP transport abstractions, and the
-repository's relationship to `agentic-sop`. Produce a concrete current-state
-diagram. Do not infer architecture from old documentation when source disagrees.
+Establish the exact current state of `sop-decision-adapters`.
+
+Record:
+
+- branch;
+- HEAD;
+- upstream relationship;
+- working-tree state;
+- Go toolchain;
+- build/test baseline;
+- provider interface;
+- request/result types;
+- existing adapters;
+- provider registration/factory;
+- configuration;
+- capability representation;
+- timeout/cancellation behavior;
+- process/HTTP abstractions;
+- tests;
+- relationship to `agentic-sop`.
+
+Produce a current-state architecture diagram.
+
+Do not infer from documentation when source disagrees.
 
 ### Dependencies
 
@@ -159,47 +270,76 @@ None
 
 ### Deliverables
 
-- docs/reports/clef-provider/CLEF-001-repository-truth.md — current-state trace, boundary inventory, and diagram (evidence record)
+- `docs/reports/clef-provider/CLEF-001-repository-truth.md`
 
 ### Acceptance Criteria
 
-- Branch, HEAD, upstream relationship, working-tree state, Go toolchain, and the current build/test baseline are recorded.
-- The provider interface, request/result types, and error model are identified with file/symbol evidence.
-- Existing adapters (Nimble, Julia) and their transport abstractions are identified with file/symbol evidence.
-- Provider selection/registration, configuration, capability representation, and timeout/cancellation conventions are identified.
-- The tests (offline and opt-in) and the relationship to `agentic-sop` are recorded.
-- A current-state diagram is produced, and any divergence between documentation and source is recorded.
-- No production change is made; uncommitted user changes are preserved and not modified.
+- Repository state is recorded.
+- Provider interface and request/result types are identified with file/symbol
+  evidence.
+- Existing providers such as Nimble and Julia are identified.
+- Provider selection/registration is identified.
+- Configuration and enablement behavior are identified.
+- Timeout/cancellation conventions are identified.
+- Existing test structure is identified.
+- Relationship to `agentic-sop` is recorded.
+- A current-state diagram is included.
+- Documentation/source divergence is recorded.
+- No production code is changed.
 
-### Evidence requirements
+### Evidence Requirements
 
-The current-state record and diagram citing file/symbol locations at HEAD `a419ce5`.
+The report must cite exact file and symbol locations.
 
-### Stop conditions
+### Stop Conditions
 
-Stop and report if the provider interface or the `agentic-sop` relationship cannot
-be established from authoritative in-repository evidence; record UNKNOWN with the
-remaining gap rather than asserting.
+Stop if the provider interface or integration boundary cannot be established
+from authoritative repository evidence.
 
-### Production-change scope
+Record UNKNOWN rather than guessing.
 
-None (read-only trace and report).
+### Production-Change Scope
+
+None.
 
 ---
 
 ## CLEF-002 — Verify Clef/oMLX Capability and Transport
 
-Determine, with evidence, which Clef capabilities are actually available for the
-target runtimes and which transport is viable. Investigate separately: the
-Ollama-served Clef (`clef-flash`) over `POST /v1/systemone` and the
-task-named `mlx-community/clef-4bit` served through oMLX. For each capability
-(choice; score; probability/confidence; null/indeterminate handling; supported
-request format; supported response format; model/runtime-specific behavior)
-classify SUPPORTED, UNSUPPORTED, or UNKNOWN/REQUIRES EXPERIMENT. Determine
-explicitly whether `mlx-community/clef-4bit` + oMLX can expose the decision
-semantics needed, or whether (as the design analysis indicates) oMLX provides only
-generic generation/chat semantics and a translation must be either demonstrated
-faithful or rejected. Do not invent compatibility.
+Determine with evidence which Clef capabilities are available on each candidate
+runtime.
+
+Investigate:
+
+#### Ollama / clef-flash
+
+- choice;
+- score;
+- probability;
+- confidence;
+- null/indeterminate;
+- request shape;
+- response shape;
+- unsupported operations;
+- runtime/model-specific behavior.
+
+#### oMLX / mlx-community/clef-4bit
+
+Determine whether oMLX can expose equivalent Clef decision semantics.
+
+Explicitly distinguish:
+
+- native decision interface;
+- faithful translation;
+- generic generation approximation.
+
+Generic generation alone MUST NOT be classified as equivalent.
+
+Classify each capability as:
+
+- SUPPORTED
+- UNSUPPORTED
+- UNKNOWN / REQUIRES EXPERIMENT
 
 ### Dependencies
 
@@ -211,46 +351,77 @@ faithful or rejected. Do not invent compatibility.
 
 ### Deliverables
 
-- docs/reports/clef-provider/CLEF-002-capability-transport.md — a per-capability classification (SUPPORTED/UNSUPPORTED/UNKNOWN) for both runtimes, the oMLX compatibility conclusion, and the selected primary transport with rationale
-- Bounded probe captures (request/response) for every capability claimed SUPPORTED
+- `docs/reports/clef-provider/CLEF-002-capability-transport.md`
+- bounded request/response captures for each capability claimed SUPPORTED
 
 ### Acceptance Criteria
 
-- Each of choice, score, probability/confidence, null/indeterminate handling, request format, and response format is classified for the Ollama-served Clef path with a captured probe as evidence.
-- The oMLX path is classified explicitly: whether it exposes Clef decision semantics natively, whether a translation is faithful, or whether it is not viable for decision evaluation.
-- No compatibility is asserted without a capture; any unexercised behavior is recorded UNKNOWN/REQUIRES EXPERIMENT.
-- Whether `clef-flash` (Ollama) and `mlx-community/clef-4bit` are the same base model is recorded as established or UNKNOWN.
-- Exactly one primary transport is selected with an evidence-based rationale; the design report's selection is confirmed or corrected with evidence.
-- No production provider code is written; probes are bounded and read-only.
+- Ollama Clef capabilities are individually classified.
+- Every SUPPORTED classification has captured evidence.
+- oMLX compatibility is explicitly classified.
+- No untested behavior is presented as supported.
+- Whether `clef-flash` and `mlx-community/clef-4bit` represent the same base
+  model is either established or recorded UNKNOWN.
+- Exactly one primary transport is selected.
+- The primary transport is selected based on semantic fidelity and evidence,
+  not convenience.
+- No production provider implementation is created.
 
-### Evidence requirements
+### Evidence Requirements
 
-The capability report with probe captures and the explicit oMLX compatibility conclusion.
+Capability table plus bounded captures.
 
-### Stop conditions
+### Stop Conditions
 
-Stop and report if no Clef runtime can produce bounded choice evidence (choice and
-confidence) at all; do not fabricate decision semantics from generic generation
-output.
+Stop if no Clef runtime can produce bounded choice evidence containing:
 
-### Production-change scope
+- an allowed choice; and
+- usable confidence semantics required by the provider mapping.
 
-None in production packages; bounded probe inputs/captures and the report only.
+Do not fabricate decision semantics using generic chat output.
+
+### Production-Change Scope
+
+Reports and probe artifacts only.
 
 ---
 
 ## CLEF-003 — Define Clef-to-Provider Contract Mapping
 
-Fix the exact, field-by-field mapping from the SOP-proven SEAM-002 contract to the
-adapter, and from the adapter to Clef, and back. Specify: the SEAM-002 request DTO
-to the local adapter request and Clef operation; the Clef result to the
-provider-neutral evidence (SEAM-002 result DTO); the status derivation
-(`OK`/`UNSUPPORTED`/`ERROR`/`INDETERMINATE`); the confidence semantics; and the
-forbidden content that must never cross the boundary (lifecycle transitions,
-approval, authorization, commit/merge/scheduler authority, policy outcomes, and
-execution-model/class selection). Define the failure mapping for every
-Clef-specific failure into the generic provider contract, and confirm whether the
-SOP contract can represent each failure without new SOP policy semantics.
+Define the exact mapping between:
+
+```text
+SEAM request
+    ->
+local adapter request
+    ->
+Clef operation
+    ->
+Clef response
+    ->
+provider-neutral result
+```
+
+Specify:
+
+- request mapping;
+- result mapping;
+- allowed-choice handling;
+- confidence semantics;
+- status derivation;
+- unsupported semantics;
+- indeterminate semantics;
+- transport failure semantics;
+- malformed-result semantics.
+
+Statuses must map into the existing provider-neutral contract:
+
+- OK
+- UNSUPPORTED
+- ERROR
+- INDETERMINATE
+
+Explicitly enumerate forbidden authority fields.
 
 ### Dependencies
 
@@ -259,50 +430,51 @@ SOP contract can represent each failure without new SOP policy semantics.
 ### Requires
 
 - Go build/test toolchain
-- agentic-sop provider-neutral decision seam (SEAM-002)
+- agentic-sop provider-neutral decision seam
 
 ### Deliverables
 
-- docs/reports/clef-provider/CLEF-003-adapter-contract-mapping.md — the request/result mapping tables, status/confidence rules, forbidden-content list, and the failure-mapping table
+- `docs/reports/clef-provider/CLEF-003-adapter-contract-mapping.md`
 
 ### Acceptance Criteria
 
-- Every SEAM-002 request field is mapped to an adapter field and a Clef operation, with ownership noted.
-- Every Clef result form (choice, no-confidence, out-of-set choice, invalid confidence, indeterminate, unsupported, error) is mapped to a SEAM-002 result with status and exit behavior.
-- The forbidden content (lifecycle/approval/authorization/commit/merge/policy/execution-model authority) is explicitly enumerated and absent from the mapping.
-- The failure-mapping table covers runtime unavailable, model unavailable, endpoint unavailable, timeout, cancellation, malformed response, invalid choice, invalid confidence, unsupported operation, indeterminate result, transport failure, and model load failure.
-- The report states whether the generic provider contract can represent each failure without new SOP policy semantics, or records an explicit contract gap.
-- The mapping keeps provider-specific types inside `sop-decision-adapters` and changes neither the local contract nor the SOP contract.
+- Every provider-neutral request field has a defined mapping.
+- Every supported Clef result form has a defined mapping.
+- Invalid choice handling is explicit.
+- Invalid confidence handling is explicit.
+- Unsupported behavior is explicit.
+- Indeterminate behavior is explicit.
+- Runtime/model/transport failures are mapped.
+- No lifecycle, approval, authorization, commit, merge, policy, scheduler, or
+  execution-model authority appears in the adapter result.
+- The existing provider-neutral contract can represent all required Clef
+  outcomes.
 
-### Evidence requirements
+### Stop Conditions
 
-The mapping document with the request, result, status, and failure tables.
+Stop if Clef requires:
 
-### Stop conditions
+- SOP-specific policy;
+- lifecycle authority;
+- approval authority;
+- new provider-specific SOP semantics;
+- a provider-neutral contract change.
 
-Stop and report if Clef requires provider-specific SOP policy, lifecycle
-authority, or approval authority, or if a real Clef failure cannot be represented
-by the SOP contract and would require modifying `agentic-sop`.
+### Production-Change Scope
 
-### Production-change scope
-
-None (contract/mapping document only).
+None.
 
 ---
 
 ## CLEF-004 — Implement Clef Provider
 
 Implement the Clef provider behind the existing local `decision.Provider`
-abstraction, plus the provider-neutral SEAM-002 wire layer that `agentic-sop`'s
-process boundary reaches. The provider owns Clef request construction, the
-selected transport, Clef response parsing, capability detection, provider-specific
-pre-return validation, conversion into provider-neutral evidence, and
-provider-specific diagnostics. The wire layer is provider-neutral (it accepts any
-local provider) so that another provider can satisfy the same contract with no SOP
-policy change. Clef is OFF at the wire layer: nothing is invoked unless the
-capability is explicitly enabled and a provider selected. No Clef-specific branch,
-identity, or type is introduced into the public `decision` package, into Nimble or
-Julia, or into any SOP-facing policy.
+abstraction.
+
+Implement the provider-neutral wire layer required by the existing
+`agentic-sop` process boundary.
+
+Clef-specific implementation stays entirely adapter-side.
 
 ### Dependencies
 
@@ -311,60 +483,75 @@ Julia, or into any SOP-facing policy.
 ### Requires
 
 - Go build/test toolchain
-- agentic-sop provider-neutral decision seam (SEAM-002)
+- agentic-sop provider-neutral decision seam
 
 ### Deliverables
 
-- internal/providers/clef/clef.go — Provider wired to a transport and translation, implementing `decision.Provider`
-- internal/providers/clef/translate.go — DecisionRequest/DecisionResult ⇄ Clef/SystemOne translation (choice-oriented), with confidence and allowed-choice enforcement
-- internal/providers/clef/transport.go — `Transport` interface plus the selected Clef transport (private wire types)
-- internal/providers/clef/config.go — `CLEF_*` environment configuration with defaults and CLI overrides
-- internal/providers/clef/capability.go — capability/support rules including UNSUPPORTED and INDETERMINATE derivation
-- internal/evidence/ — provider-neutral SEAM-002 request/result wire layer (request DTO → local request; local result/error → result DTO)
-- cmd/sop-decision-adapter — a provider-neutral `serve` subcommand that selects a provider by name and speaks the SEAM-002 DTO on stdin/stdout
-- docs/specs/clef-provider.md — the normative Clef adapter spec; updates to architecture, configuration reference, CLI reference, and `.env.example`
+Expected implementation areas:
+
+- `internal/providers/clef/clef.go`
+- `internal/providers/clef/translate.go`
+- `internal/providers/clef/transport.go`
+- `internal/providers/clef/config.go`
+- `internal/providers/clef/capability.go`
+- provider-neutral wire layer under an appropriate internal package
+- provider-neutral `serve` CLI/subcommand
+- `docs/specs/clef-provider.md`
+- configuration documentation
+- `.env.example` updates where appropriate
+
+Exact paths may be adjusted to match current repository architecture discovered
+in CLEF-001.
 
 ### Acceptance Criteria
 
-- `internal/providers/clef` implements `decision.Provider` (`Name` returns a stable identifier, `Available` performs no inference, `Decide` validates, transports, and normalizes).
-- The selected transport is the primary transport from CLEF-002; no unverified transport is enabled by default.
-- Confidence and probabilities are validated against `[0,1]`; a choice outside the allowed set is rejected (fail closed) and never emitted as evidence.
-- Unsupported kinds/operations produce an explicit UNSUPPORTED result; the adapter never returns a low-confidence guess as a stand-in.
-- The `serve` subcommand reads the SEAM-002 request DTO on stdin and writes the SEAM-002 result DTO on stdout, and exits non-zero on a transport failure (no usable result).
-- The `serve` wire layer accepts any local provider; it contains no Clef-specific branch.
-- No provider-specific type appears in the public `decision` package; Nimble and Julia are unchanged.
-- The capability is OFF by default; constructing the Clef provider is a no-op unless selected and enabled.
-- No change is made to `agentic-sop`, its policy, or the SMALL/MEDIUM/LARGE execution-model routing.
+- Clef implements the existing local provider abstraction.
+- Clef-specific transport types remain private/internal.
+- The selected CLEF-002 transport is used.
+- Unverified transports are not enabled.
+- Choice must belong to the request's allowed set.
+- Confidence/probabilities must be valid and bounded.
+- NaN/Inf are rejected.
+- Unsupported operations return UNSUPPORTED.
+- Indeterminate outcomes remain indeterminate.
+- Transport failures do not become successful evidence.
+- The wire layer is provider-neutral.
+- The wire layer contains no Clef-specific policy branch.
+- No provider-specific type is added to the public `decision` package.
+- Existing providers remain unchanged except where a generic registry/factory
+  extension is strictly necessary.
+- Clef is OFF by default.
+- Transport defaults MUST NOT implicitly enable Clef.
+- Provider selection requires explicit operator action.
+- No `agentic-sop` change is required.
+- No execution-model routing is changed.
 
-### Evidence requirements
+### Evidence Requirements
 
-The implementation diff, the adapter spec, and a configuration/CLI update; a
-manual `serve` invocation demonstrating request-in/result-out against a local
-runtime or a fake transport.
+Implementation diff plus a bounded request-in/result-out demonstration.
 
-### Stop conditions
+### Stop Conditions
 
-Stop and report if implementing Clef requires importing an `agentic-sop` package,
-exposing lifecycle/approval authority in the DTO, or changing the public
-`decision` contract or `internal/model` routing.
+Stop if implementation requires:
 
-### Production-change scope
+- importing `agentic-sop` internals;
+- changing the provider-neutral SOP contract;
+- exposing lifecycle or approval authority;
+- adding Clef-specific behavior to SOP-facing policy;
+- coupling Clef to SMALL/MEDIUM/LARGE routing.
 
-New adapter-side code only: `internal/providers/clef`, `internal/evidence`, and the
-CLI `serve` subcommand, plus documentation. No change to `decision/`, to Nimble or
-Julia, to `agentic-sop`, or to execution-model routing.
+### Production-Change Scope
+
+Adapter-side provider, generic wire plumbing, and documentation only.
 
 ---
 
 ## CLEF-005 — Provider Contract and Failure Tests
 
-Prove, with tests that require no real model, that Clef produces exactly the
-provider-neutral contract already proven with `agentic-sop`'s fake external
-provider, and that every failure is fail-closed. Test request translation,
-response translation, confidence/probability bounds, allowed choices, unsupported
-capability, malformed responses, and error translation; prove the adapter requires
-no SOP internal type, exposes no governance authority, and requires no
-provider-specific policy.
+Prove offline that the Clef implementation satisfies the provider-neutral
+contract and fails closed.
+
+No real model is required.
 
 ### Dependencies
 
@@ -376,43 +563,92 @@ provider-specific policy.
 
 ### Deliverables
 
-- Unit tests for `internal/providers/clef` (translation, bounds, allowed choices, unsupported capability, malformed responses, error translation) using a fake transport
-- Provider-contract tests for `internal/evidence` proving the SEAM-002 result DTO is produced for each status and validates under the SEAM-002 rules
-- Failure/governance tests proving the adapter cannot emit a governance action and that invalid/failed results fail closed
+- Clef translation tests
+- fake-transport tests
+- provider-contract tests
+- failure tests
+- governance-boundary tests
 
 ### Acceptance Criteria
 
-- Unit tests exist and pass for request translation, response translation, confidence/probability `[0,1]` bounds (including NaN/Inf rejection), allowed-choice membership, unsupported capability, malformed responses, and error translation.
-- Provider-contract tests prove the result DTO matches SEAM-002 for OK, UNSUPPORTED, ERROR, and INDETERMINATE, and that a second provider satisfies the same wire unchanged.
-- Tests prove the adapter output contains no `CONTINUE`/`BLOCK`/`APPROVE`/`REJECT`/`COMMIT`/`MERGE` or lifecycle/approval/authorization value.
-- Tests prove an out-of-set choice, out-of-range confidence, malformed response, or transport failure never becomes a success.
-- The default `go test ./...` suite passes fully offline with no model, network, Ollama, oMLX, or MLX runtime.
+Test:
 
-### Evidence requirements
+- request translation;
+- response translation;
+- confidence bounds;
+- probability bounds;
+- NaN/Inf rejection;
+- allowed-choice membership;
+- out-of-set choice rejection;
+- unsupported capability;
+- malformed response;
+- empty response;
+- transport error;
+- timeout;
+- cancellation;
+- indeterminate result;
+- ERROR result;
+- UNSUPPORTED result;
+- provider-neutral wire behavior.
 
-The passing offline test suite and the specific assertions for each failure case.
+Prove provider output contains no governance authority.
 
-### Stop conditions
+Provider output must not encode authoritative:
 
-Stop and report any case that cannot be made fail-closed without broadening the
-contract or adding provider-specific policy.
+- CONTINUE
+- BLOCK
+- APPROVE
+- REJECT
+- COMMIT
+- MERGE
+- lifecycle transition
+- approval transition
 
-### Production-change scope
+unless a literal string happens to exist as domain data, in which case it must
+remain ordinary data and carry no authority.
 
-Tests only (plus any bounded hardening the tests require); no policy-semantic
-widening and no contract change.
+Default:
+
+```text
+go test ./...
+```
+
+must remain fully offline.
+
+### Stop Conditions
+
+Stop if any failure case cannot be made fail-closed without broadening the SOP
+contract or introducing provider-specific policy.
+
+### Production-Change Scope
+
+Tests plus narrowly required implementation hardening only.
+
+No semantic contract widening.
 
 ---
 
-## CLEF-006 — Local Clef-4bit Runtime Verification
+## CLEF-006 — Local Clef Runtime Verification
 
-Verify the selected Clef transport against the real local runtime. Drive the
-verified Ollama SystemOne path with Clef (`clef-flash`), and additionally exercise
-the `mlx-community/clef-4bit` + oMLX path only if CLEF-002 demonstrated a
-fidelity-preserving transport. Measure request success rate, latency (p50/p95),
-choice validity, confidence availability, timeout behavior, malformed/indeterminate
-behavior, and repeatability. The live test is opt-in and SKIPS when the runtime is
-not configured; it asserts the contract, not fixed judgments.
+Verify the implemented provider against a real local Clef runtime.
+
+The primary runtime is the transport verified in CLEF-002.
+
+At planning time this is expected to be:
+
+```text
+Ollama
+  +
+clef-flash
+  +
+POST /v1/systemone
+```
+
+The `mlx-community/clef-4bit` + oMLX path MUST be exercised only if CLEF-002
+proved a fidelity-preserving decision transport.
+
+The task name intentionally does not claim that clef-4bit/oMLX has already been
+verified.
 
 ### Dependencies
 
@@ -425,42 +661,62 @@ not configured; it asserts the contract, not fixed judgments.
 
 ### Deliverables
 
-- tests/integration_clef_test.go — an opt-in (`CLEF_INTEGRATION_TEST=1`) live contract test that SKIPS when the runtime is absent
-- docs/reports/clef-provider/CLEF-006-local-runtime-verification.md — measured success rate, latency, choice validity, confidence availability, timeout/malformed/indeterminate behavior, and repeatability
+- opt-in live integration test
+- `docs/reports/clef-provider/CLEF-006-local-runtime-verification.md`
 
 ### Acceptance Criteria
 
-- The live test is skipped by default and only runs when `CLEF_INTEGRATION_TEST` is set; it SKIPS (never fails the suite) when the runtime is not configured.
-- The live run asserts the contract (provider available, a valid choice in the allowed set, confidence in range when present) and does not assert fixed judgments.
-- Request success rate, latency p50/p95, choice validity, confidence availability, timeout behavior, malformed/indeterminate behavior, and repeatability are recorded.
-- The oMLX/`clef-4bit` path is exercised only if CLEF-002 deemed it viable; otherwise the report records it as not exercised with the CLEF-002 reason.
-- The default offline suite is unaffected and still requires no runtime.
+The live test:
 
-### Evidence requirements
+- is disabled by default;
+- requires explicit opt-in;
+- skips cleanly when local runtime prerequisites are absent;
+- validates contract shape rather than fixed model judgment;
+- verifies returned choice belongs to allowed choices;
+- verifies confidence bounds when confidence is provided.
 
-The live test, its recorded outcomes, and the measured runtime report.
+Record:
 
-### Stop conditions
+- request success rate;
+- latency p50;
+- latency p95;
+- choice validity;
+- confidence availability;
+- timeout behavior;
+- malformed/indeterminate behavior;
+- repeatability.
 
-Stop and report if the verified transport cannot produce valid provider-neutral
-evidence on the real runtime, or if the runtime is unavailable and no bounded
-alternative is available.
+If oMLX/clef-4bit is not viable, record:
 
-### Production-change scope
+```text
+NOT EXERCISED — see CLEF-002
+```
 
-An opt-in test and a report; no production behavior change and no default enablement.
+Do not imply clef-4bit verification occurred.
+
+### Stop Conditions
+
+Stop if the selected primary runtime cannot produce valid provider-neutral
+evidence.
+
+### Production-Change Scope
+
+Opt-in tests and report only.
 
 ---
 
 ## CLEF-007 — Shadow Evaluation Harness
 
-Build an adapter-side evaluation harness that compares Clef decisions against
-deterministic expected cases, existing SOP outcomes, and optionally Nimble, and
-reports disagreements. The harness is observational: it returns the primary result
-only and records the shadow result; a shadow error or disagreement is captured,
-never surfaced as a primary failure and never fed back into SOP policy. Because the
-SOP seam provides OFF and enabled (no runtime shadow mode), shadow evaluation is
-performed here, adapter-side, and Clef remains non-authoritative.
+Build an adapter-side evaluation harness for observational comparison.
+
+The harness may compare:
+
+- Clef;
+- deterministic expected outcomes;
+- recorded SOP outcomes;
+- Nimble where semantically comparable.
+
+Shadow evaluation MUST NOT influence the primary decision.
 
 ### Dependencies
 
@@ -472,42 +728,59 @@ performed here, adapter-side, and Clef remains non-authoritative.
 
 ### Deliverables
 
-- An adapter-side shadow/evaluation command or harness under `internal/eval` or `tools/` that runs a primary and a shadow provider and records a disagreement report
-- docs/reports/clef-provider/CLEF-007-shadow-evaluation.md — the harness design and a first evaluation record
+- adapter-side shadow/evaluation harness
+- harness tests
+- `docs/reports/clef-provider/CLEF-007-shadow-evaluation.md`
 
 ### Acceptance Criteria
 
-- The harness records agreement rate, disagreement cases, invalid-choice rate, indeterminate rate, latency p50/p95, timeout/failure rate, and confidence distribution.
-- The harness returns the primary result only; the shadow result is observational and never returned as the decision.
-- A shadow error, timeout, or disagreement never alters the primary result and never influences SOP policy.
-- The harness runs offline with fakes and, optionally, against a real Clef runtime when configured.
-- No SOP policy, `agentic-sop`, or execution-model routing is changed.
+Record:
 
-### Evidence requirements
+- agreement rate;
+- disagreement cases;
+- invalid-choice rate;
+- indeterminate rate;
+- latency p50/p95;
+- timeout/failure rate;
+- confidence distribution.
 
-The harness, its tests, and the evaluation record.
+A shadow:
 
-### Stop conditions
+- timeout;
+- error;
+- disagreement;
+- malformed response
 
-Stop and report if shadow evaluation cannot be made observational (i.e., if it
-would need to affect the primary decision or SOP policy).
+must never alter the primary result.
 
-### Production-change scope
+No shadow output is fed into SOP policy.
 
-Adapter-side evaluation tooling and reports; no change to the live decision path
-and no default enablement.
+### Stop Conditions
+
+Stop if shadow evaluation cannot remain purely observational.
+
+### Production-Change Scope
+
+Evaluation tooling only.
+
+No live-path semantic change.
 
 ---
 
 ## CLEF-008 — Benchmark and Compare Decision Quality
 
-Design and run a focused benchmark that compares Clef decision-provider
-suitability across the supported matrix: Clef via Ollama SystemOne (primary),
-Clef 4-bit via oMLX (only if CLEF-002 proved a faithful translation), optionally
-Clef 8-bit as a quantization/fidelity baseline, and Nimble where comparable.
-Capture choice validity, confidence availability, confidence calibration where
-ground truth exists, agreement with expected/SOP outcomes, latency, and
-timeout/failure rate. Do not expand into general LLM benchmarking.
+Run a focused decision-provider benchmark.
+
+Primary matrix:
+
+- Clef via verified primary transport;
+- Nimble where semantically comparable.
+
+Conditional matrix:
+
+- `mlx-community/clef-4bit` via oMLX only if CLEF-002 proved faithful decision
+  semantics;
+- Clef 8-bit only if needed as a quantization/fidelity comparison.
 
 ### Dependencies
 
@@ -519,44 +792,47 @@ timeout/failure rate. Do not expand into general LLM benchmarking.
 
 ### Deliverables
 
-- A benchmark harness and corpus for decision-provider suitability
-- docs/reports/clef-provider/CLEF-008-benchmark.md — the matrix, metrics, and comparison, including quantization effects where measurable
+- benchmark harness
+- benchmark corpus
+- `docs/reports/clef-provider/CLEF-008-benchmark.md`
 
 ### Acceptance Criteria
 
-- The benchmark matrix covers Clef via Ollama SystemOne, and includes Nimble where comparable; it includes Clef 4-bit/oMLX only if a faithful translation was proven.
-- Choice validity, confidence availability, calibration (where ground truth exists), agreement, latency, and timeout/failure rate are measured and recorded.
-- Quantization/fidelity is compared where evidence supports it, or recorded as not measurable with the reason.
-- The benchmark is scoped to decision-provider suitability; it does not expand into general LLM benchmarking.
-- No benchmark result changes SOP policy, the contract, or execution-model routing.
+Measure:
 
-### Evidence requirements
+- choice validity;
+- agreement with expected outcomes;
+- confidence availability;
+- confidence calibration where ground truth exists;
+- latency;
+- timeout rate;
+- failure rate;
+- indeterminate rate.
 
-The benchmark harness, its corpus, and the comparison report.
+Quantization/fidelity impact must be recorded where measurable.
 
-### Stop conditions
+This task MUST NOT become a general LLM benchmark.
 
-Stop and report if the benchmark would require changing the contract, policy, or
-execution-model routing, or if no comparable provider is available.
+Benchmark results MUST NOT modify SOP policy.
 
-### Production-change scope
+### Stop Conditions
 
-Adapter-side benchmark tooling and reports; no change to the live decision path.
+Stop if meaningful comparison would require changing:
+
+- provider contract;
+- SOP policy;
+- governance;
+- execution-model routing.
+
+### Production-Change Scope
+
+Benchmark/evaluation tooling only.
 
 ---
 
 ## CLEF-009 — Full Verification and Security Review
 
-Run the complete repository verification gates and the provider-neutrality and
-governance guards, recording exact commands and outcomes; perform a security review
-of the adapter-side surface. Verify: no Clef-specific policy branch; no provider
-name or model name drives SOP behavior; Clef output cannot transition lifecycle
-state, create an approval, or authorize a commit/merge; malformed/unknown/
-indeterminate evidence fails closed; provider absence and provider failure preserve
-governed behavior; decision-provider selection remains independent of
-SMALL/MEDIUM/LARGE routing; another provider satisfies the same contract with no SOP
-policy change; oMLX/Ollama/SystemOne details remain adapter-side; and Clef is OFF
-and non-default.
+Perform complete repository verification and architecture review.
 
 ### Dependencies
 
@@ -568,41 +844,116 @@ and non-default.
 
 ### Deliverables
 
-- docs/reports/clef-provider/CLEF-009-verification.md — the verification and security-review record with exact commands and results
+- `docs/reports/clef-provider/CLEF-009-verification.md`
 
 ### Acceptance Criteria
 
-- `gofmt -l .`, `go vet ./...`, `go test -count=1 ./...`, `go test -race -count=1 ./...`, `go build ./...`, and `git diff --check` are run with exact commands and results recorded.
-- Each architecture guard (1--12) is verified and recorded with test/inspection evidence.
-- Security review covers transport invocation (no shell), bounded output, environment handling, secret non-leakage, and fail-closed error handling.
-- The verification record is produced; no gate is claimed passing without a recorded outcome.
-- No task is marked complete with a failing required gate.
+- All required gates (`gofmt -l .`, `go vet ./...`, `go test -count=1 ./...`, `go test -race -count=1 ./...`, `go build ./...`, `git diff --check`) are run with exact commands and outcomes recorded.
+- Each architecture guard is verified and recorded with test or inspection evidence.
+- The security review covers transport invocation, endpoint/URL validation, environment and secret handling, bounded output, and fail-closed error handling.
+- The verification record `docs/reports/clef-provider/CLEF-009-verification.md` is produced.
+- No task is marked complete with a failing required gate or an unresolved Critical or High finding.
+- No SOP policy, provider contract, governance, approval, lifecycle, or execution-model routing is changed.
 
-### Evidence requirements
+### Required Gates
 
-The verification record with exact commands and outcomes, and the security-review findings.
+Run:
 
-### Stop conditions
+```bash
+gofmt -l .
+go vet ./...
+go test -count=1 ./...
+go test -race -count=1 ./...
+go build ./...
+git diff --check
+```
 
-Stop and report any failing required gate; do not mark the task complete.
+All required gates must pass.
 
-### Production-change scope
+### Architecture Guards
 
-Tests/guards and reports only (no policy widening, no contract change, no default
-enablement).
+Verify:
+
+1. No Clef-specific SOP policy exists.
+2. Provider/model name does not drive SOP policy.
+3. Clef cannot transition lifecycle state.
+4. Clef cannot create or satisfy approval.
+5. Clef cannot authorize execution.
+6. Clef cannot authorize commit or merge.
+7. Invalid evidence fails closed.
+8. Provider failure cannot produce authorization.
+9. Another provider can use the same wire contract.
+10. oMLX/Ollama/SystemOne details remain adapter-side.
+11. Decision-provider selection remains independent of SMALL/MEDIUM/LARGE
+    routing.
+12. Clef remains OFF and non-default.
+
+### Security Review
+
+Review:
+
+- shell/command injection;
+- use of `sh -c`;
+- URL/endpoint validation;
+- argument handling;
+- environment leakage;
+- secret leakage;
+- unbounded response handling;
+- malformed JSON;
+- timeout/cancellation cleanup;
+- goroutine/process leaks;
+- diagnostic injection;
+- provider output being interpreted as an instruction.
+
+### Stop Conditions
+
+Any required gate failure blocks completion.
+
+Any Critical/High architecture or security finding blocks readiness.
+
+### Production-Change Scope
+
+Verification hardening and tests only.
+
+No policy or contract widening.
 
 ---
 
-## CLEF-010 — Selectable-Provider Readiness Decision
+## CLEF-010 — Selectable-Provider Readiness Review
 
-Produce exactly one readiness result (READY, READY_WITH_NOTES, or NOT_READY) for
-making Clef a **selectable** decision provider in `agentic-sop`, answering
-explicitly whether Clef can be selected through the provider-neutral seam without
-any Clef-specific policy, lifecycle, approval, authorization, or execution-routing
-change in `agentic-sop`. Do not include `DEFAULT` as a state: making Clef live,
-selectable, or default is a separate decision requiring separate evidence and
-human approval. If READY or READY_WITH_NOTES, name exactly one next action; if
-NOT_READY, report the smallest adapter-side correction required.
+Produce the final adapter readiness decision.
+
+This task determines whether the Clef adapter is ready to enter a separate
+**selectable-provider review**.
+
+It does NOT authorize making Clef selectable.
+
+It does NOT enable Clef.
+
+It does NOT make Clef live.
+
+It does NOT make Clef default.
+
+Final task result must be exactly one of:
+
+- READY
+- READY_WITH_NOTES
+- NOT_READY
+
+Interpretation:
+
+#### READY
+
+The adapter is ready to enter a separate selectable-provider review.
+
+#### READY_WITH_NOTES
+
+The adapter is ready to enter a separate selectable-provider review, with
+non-blocking notes that must be carried forward.
+
+#### NOT_READY
+
+Adapter-side deficiencies remain.
 
 ### Dependencies
 
@@ -614,39 +965,59 @@ NOT_READY, report the smallest adapter-side correction required.
 
 ### Deliverables
 
-- docs/reports/clef-provider/CLEF-010-readiness-decision.md — the final readiness report
+- `docs/reports/clef-provider/CLEF-010-readiness-decision.md`
 
 ### Acceptance Criteria
 
-- Exactly one readiness result is produced: READY, READY_WITH_NOTES, or NOT_READY.
-- The report explicitly answers whether Clef can be selectable through the provider-neutral seam without provider-specific behavior or policy authority in `agentic-sop`.
-- The report includes repository state, CLEF-001..CLEF-010 task states with one-line evidence, the verified transport and wire contract, the failure semantics, the governance boundary, verification commands and outcomes, changes, the readiness decision, and exactly one next action.
-- The report confirms Clef is OFF and non-default, that `decision/` and `agentic-sop` are unchanged, and that SMALL/MEDIUM/LARGE execution-model routing is unchanged.
-- No `DEFAULT` state is introduced; making Clef default is explicitly deferred to separate evidence and human approval.
+The report must explicitly answer:
 
-### Evidence requirements
+> Can Clef now be considered READY_FOR_SELECTABLE_REVIEW through the existing
+> provider-neutral seam without requiring Clef-specific policy, lifecycle,
+> approval, authorization, or execution-routing changes in agentic-sop?
 
-The readiness report with cited evidence from CLEF-001..CLEF-009.
+Record:
 
-### Stop conditions
+- repository state;
+- CLEF-001..CLEF-010 evidence;
+- verified transport;
+- provider-neutral wire contract;
+- failure semantics;
+- governance boundary;
+- verification results;
+- security findings;
+- benchmark findings;
+- residual risks;
+- readiness result.
 
-Stop and report if Clef cannot be shown to preserve the guards; classify NOT_READY
-with the smallest bounded adapter-side correction.
+The report must confirm:
 
-### Production-change scope
+- Clef remains OFF;
+- Clef remains non-default;
+- no `agentic-sop` change is required;
+- SMALL/MEDIUM/LARGE routing remains unchanged;
+- making Clef selectable requires separate human approval.
 
-None (readiness report only).
+If READY or READY_WITH_NOTES, recommend exactly one next action:
+
+```text
+Open selectable-provider review.
+```
+
+Do not enable Clef.
+
+### Stop Conditions
+
+Return NOT_READY if Clef cannot preserve the architecture/governance guards.
+
+### Production-Change Scope
+
+None.
 
 ---
 
 ## Execution Policy
 
-Include the plan-wide planning and discovery constraint in every task's planning
-input. Model repository discovery in task objectives and acceptance criteria, never
-as a prerequisite `Requires` entry. Preserve completed evidence inputs; do not
-rediscover them as prerequisite capabilities.
-
-Execute tasks sequentially:
+Execute sequentially:
 
 ```text
 CLEF-001
@@ -670,31 +1041,70 @@ CLEF-009
 CLEF-010
 ```
 
-Use truthful task states: `PLANNED`, `ACTIVE`, `LOCAL_DONE`, `BLOCKED`,
-`NOT_REQUIRED`.
+Use truthful lifecycle states:
 
-Do not: skip a blocked gate; claim completion without evidence; overwrite unrelated
-user changes; amend unrelated commits; modify `agentic-sop`; change the
-provider-neutral contract; change SOP governance, policy, or the SMALL/MEDIUM/LARGE
-execution-model routing; introduce Clef-specific types into the public `decision`
-package; make Clef default, live, or selectable; push unless the repository
-workflow explicitly authorizes it.
+- PLANNED
+- ACTIVE
+- LOCAL_DONE
+- BLOCKED
+- NOT_REQUIRED
+
+Do not:
+
+- skip a blocked gate;
+- claim completion without evidence;
+- overwrite unrelated user changes;
+- amend unrelated commits;
+- modify `agentic-sop`;
+- change the provider-neutral contract;
+- change SOP governance;
+- change SOP policy;
+- change approval behavior;
+- change SMALL/MEDIUM/LARGE routing;
+- introduce Clef-specific types into the public provider contract;
+- assume oMLX semantics;
+- make Clef selectable;
+- make Clef live;
+- make Clef default;
+- push unless explicitly approved.
+
+Human review is required between major stages, especially:
+
+```text
+CLEF-002 -> CLEF-003
+CLEF-003 -> CLEF-004
+CLEF-009 -> CLEF-010
+```
+
+---
 
 ## Expected End State
 
-A successful run leaves `sop-decision-adapters` with a Clef decision provider that:
+A successful plan leaves `sop-decision-adapters` with a Clef provider that:
 
-- implements the existing local `decision.Provider` abstraction;
-- is reached by `agentic-sop` over the provider-neutral SEAM-002 JSON process
-  boundary, through a provider-neutral `serve` wire layer;
-- produces evidence only, with choice and confidence, and never a governance
-  action;
-- fails closed on malformed, invalid, unsupported, indeterminate, unavailable,
-  timed-out, or cancelled outcomes;
-- keeps all oMLX/Ollama/SystemOne/Clef details adapter-side;
-- leaves `decision/`, Nimble, Julia, `agentic-sop`, and SMALL/MEDIUM/LARGE routing
-  unchanged;
-- is OFF and non-default, with shadow evaluation and benchmarking performed
-  adapter-side;
-- is, at most, READY_FOR_SELECTABLE_REVIEW — making Clef selectable, live, or
-  default requires separate evidence and human approval.
+- implements the existing adapter-side provider abstraction;
+- communicates with `agentic-sop` through the existing provider-neutral process
+  boundary;
+- imports no SOP internal package;
+- emits evidence only;
+- validates choice and confidence;
+- fails closed;
+- keeps Clef/Ollama/oMLX/SystemOne details adapter-side;
+- leaves SOP governance unchanged;
+- leaves approval semantics unchanged;
+- leaves lifecycle semantics unchanged;
+- leaves SMALL/MEDIUM/LARGE routing unchanged;
+- remains OFF;
+- remains non-default;
+- has been locally verified;
+- has been shadow-evaluated;
+- has been benchmarked;
+- has passed full verification/security review;
+- is, at most:
+
+```text
+READY_FOR_SELECTABLE_REVIEW
+```
+
+Making Clef selectable, live, or default requires a separate plan, separate
+evidence, and explicit human approval.
