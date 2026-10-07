@@ -1,0 +1,17 @@
+{
+  "_capture": "ollama-version",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:44+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "GET",
+  "path": "/api/version",
+  "request": null,
+  "http_status": 200,
+  "elapsed_ms": 7,
+  "_truncated": false,
+  "response": {
+    "version": "0.40.0"
+  }
+}

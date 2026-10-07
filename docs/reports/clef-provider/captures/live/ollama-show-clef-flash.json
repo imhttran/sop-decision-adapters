@@ -1,0 +1,41 @@
+{
+  "_capture": "ollama-show-clef-flash",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:44+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/api/show",
+  "request": {
+    "model": "clef-flash"
+  },
+  "http_status": 200,
+  "elapsed_ms": 17,
+  "_truncated": false,
+  "response": {
+    "parameters": "num_ctx                        16384",
+    "details": {
+      "parent_model": "",
+      "format": "safetensors",
+      "family": "clef",
+      "families": null,
+      "parameter_size": "9.5B",
+      "quantization_level": "mxfp8",
+      "runner": "mlx"
+    },
+    "model_info": {
+      "clef.block_count": 32,
+      "clef.context_length": 262144,
+      "clef.embedding_length": 4096,
+      "general.architecture": "clef",
+      "general.parameter_count": 9531164032
+    },
+    "capabilities": [
+      "decision",
+      "vision"
+    ],
+    "modified_at": "2026-10-06T20:18:11.124627-05:00",
+    "requires": "0.40.0"
+  }
+}

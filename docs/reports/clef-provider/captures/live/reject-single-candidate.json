@@ -1,0 +1,29 @@
+{
+  "_capture": "reject-single-candidate",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": {
+    "model": "clef-flash",
+    "state": "A change touches an untested code path and would deploy to production without review.",
+    "questions": {
+      "q": {
+        "type": "choice",
+        "instructions": "x",
+        "criteria": {
+          "ONLY": null
+        }
+      }
+    }
+  },
+  "http_status": 400,
+  "elapsed_ms": 6,
+  "_truncated": false,
+  "response": {
+    "error": "question \"q\": criteria must contain 2\u201326 candidates"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "_capture": "score",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:47+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": {
+    "model": "clef-flash",
+    "state": "A change touches an untested code path and would deploy to production without review.",
+    "questions": {
+      "q": {
+        "type": "score",
+        "instructions": "How safe is it to deploy this change?",
+        "criteria": [
+          "not safe",
+          "somewhat safe",
+          "very safe"
+        ]
+      }
+    }
+  },
+  "http_status": 200,
+  "elapsed_ms": 368,
+  "_truncated": false,
+  "response": {
+    "model": "clef-flash",
+    "answers": {
+      "q": {
+        "type": "score",
+        "score": 0.10353923849629687,
+        "legend": {
+          "0": "not safe",
+          "1": "somewhat safe",
+          "2": "very safe"
+        },
+        "probabilities": {
+          "0": 0.9222164352208049,
+          "1": 0.05202789106209318,
+          "2": 0.025755673717101846
+        },
+        "confidence": 0.7062543831282889
+      }
+    },
+    "usage": {
+      "input_tokens": 164,
+      "output_tokens": 0
+    },
+    "prompt_eval_cached_count": 0
+  },
+  "invariants": {
+    "q": {
+      "probability_sum": 1.0,
+      "one_minus_normalized_entropy": 0.706254383,
+      "reported_confidence": 0.7062543831282889,
+      "confidence_matches_entropy_formula": true,
+      "score_is_expected_index": true
+    }
+  }
+}

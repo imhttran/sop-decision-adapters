@@ -1,0 +1,40 @@
+{
+  "_capture": "omlx-models",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:8000",
+  "method": "GET",
+  "path": "/v1/models",
+  "request": null,
+  "http_status": 200,
+  "elapsed_ms": 3,
+  "_truncated": false,
+  "response": {
+    "object": "list",
+    "data": [
+      {
+        "id": "Qwen3-4B-4bit",
+        "object": "model",
+        "created": 1791389748,
+        "owned_by": "omlx",
+        "max_model_len": 40960
+      },
+      {
+        "id": "clef-4bit",
+        "object": "model",
+        "created": 1791389748,
+        "owned_by": "omlx",
+        "max_model_len": 262144
+      },
+      {
+        "id": "clef-8bit",
+        "object": "model",
+        "created": 1791389748,
+        "owned_by": "omlx",
+        "max_model_len": 262144
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "_capture": "chat",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/api/chat",
+  "request": {
+    "model": "clef-flash",
+    "stream": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Reply with OK."
+      }
+    ]
+  },
+  "http_status": 400,
+  "elapsed_ms": 10,
+  "_truncated": false,
+  "response": {
+    "error": "\"clef-flash\" does not support chat"
+  }
+}

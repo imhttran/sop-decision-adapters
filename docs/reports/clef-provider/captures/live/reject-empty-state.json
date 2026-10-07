@@ -1,0 +1,26 @@
+{
+  "_capture": "reject-empty-state",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": {
+    "model": "clef-flash",
+    "state": "",
+    "questions": {
+      "q": {
+        "type": "noul",
+        "instructions": "x"
+      }
+    }
+  },
+  "http_status": 400,
+  "elapsed_ms": 5,
+  "_truncated": false,
+  "response": {
+    "error": "state must not be empty"
+  }
+}

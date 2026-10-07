@@ -1,0 +1,44 @@
+{
+  "_capture": "clef-4bit-local-metadata",
+  "_observed_live": true,
+  "model_dir": "/Users/imhttran/.omlx/omlx/models/mlx-community/clef-4bit",
+  "timestamp": "2026-10-07T16:15:44+00:00",
+  "text_config": {
+    "model_type": "qwen3_5_text",
+    "hidden_size": 5120,
+    "num_hidden_layers": 64,
+    "num_attention_heads": 24,
+    "vocab_size": 248320,
+    "max_position_embeddings": 262144
+  },
+  "joint_head_config": {
+    "hidden_size": 5120,
+    "width": 1024,
+    "routing_layers": 2,
+    "layers": 4,
+    "heads": 16,
+    "feedforward": 4096
+  },
+  "readme_front_matter": [
+    "license: apache-2.0",
+    "library_name: mlx",
+    "base_model: Cloudflare/clef",
+    "base_model_relation: quantized",
+    "pipeline_tag: zero-shot-classification",
+    "tags:",
+    "- mlx",
+    "- clef",
+    "- cloudflare",
+    "- systemone",
+    "- structured-output",
+    "- classification",
+    "- multimodal",
+    "- custom-code"
+  ],
+  "weight_shards_bytes": {
+    "joint_head.safetensors": 256125024,
+    "model-00001-of-00003.safetensors": 5343268662,
+    "model-00002-of-00003.safetensors": 5354185130,
+    "model-00003-of-00003.safetensors": 5357087557
+  }
+}

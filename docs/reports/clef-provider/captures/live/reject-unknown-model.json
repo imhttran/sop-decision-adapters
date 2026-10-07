@@ -1,0 +1,26 @@
+{
+  "_capture": "reject-unknown-model",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": {
+    "model": "no-such-model",
+    "state": "A change touches an untested code path and would deploy to production without review.",
+    "questions": {
+      "q": {
+        "type": "noul",
+        "instructions": "x"
+      }
+    }
+  },
+  "http_status": 404,
+  "elapsed_ms": 10,
+  "_truncated": false,
+  "response": {
+    "error": "model \"no-such-model\" not found, try pulling it first"
+  }
+}

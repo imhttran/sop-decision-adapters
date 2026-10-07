@@ -1,0 +1,70 @@
+{
+  "_capture": "multi-question",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": {
+    "model": "clef-flash",
+    "state": "A change touches an untested code path and would deploy to production without review.",
+    "questions": {
+      "risk": {
+        "type": "choice",
+        "instructions": "Assess the operational risk of the described change.",
+        "criteria": {
+          "LOW": null,
+          "MEDIUM": null,
+          "HIGH": null
+        },
+        "choices": [
+          "LOW",
+          "MEDIUM",
+          "HIGH"
+        ]
+      },
+      "approval": {
+        "type": "noul",
+        "instructions": "Should this change require human approval?"
+      }
+    }
+  },
+  "http_status": 200,
+  "elapsed_ms": 370,
+  "_truncated": false,
+  "response": {
+    "model": "clef-flash",
+    "answers": {
+      "risk": {
+        "type": "choice",
+        "choice": "HIGH",
+        "probabilities": {
+          "LOW": 0.022776050230523526,
+          "MEDIUM": 0.06387701253264609,
+          "HIGH": 0.9133469372368302
+        },
+        "confidence": 0.6862970081070732
+      },
+      "approval": {
+        "type": "noul",
+        "noul": 0.8962513731336202
+      }
+    },
+    "usage": {
+      "input_tokens": 232,
+      "output_tokens": 0
+    },
+    "prompt_eval_cached_count": 66
+  },
+  "invariants": {
+    "risk": {
+      "probability_sum": 1.0,
+      "one_minus_normalized_entropy": 0.686297008,
+      "reported_confidence": 0.6862970081070732,
+      "confidence_matches_entropy_formula": true,
+      "choice_is_argmax": true
+    }
+  }
+}

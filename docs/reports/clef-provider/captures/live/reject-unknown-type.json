@@ -1,0 +1,26 @@
+{
+  "_capture": "reject-unknown-type",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": {
+    "model": "clef-flash",
+    "state": "A change touches an untested code path and would deploy to production without review.",
+    "questions": {
+      "q": {
+        "type": "rank",
+        "instructions": "x"
+      }
+    }
+  },
+  "http_status": 400,
+  "elapsed_ms": 6,
+  "_truncated": false,
+  "response": {
+    "error": "question \"q\": type must be choice, noul, or score"
+  }
+}

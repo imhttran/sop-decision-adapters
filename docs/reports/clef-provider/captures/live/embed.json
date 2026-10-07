@@ -1,0 +1,20 @@
+{
+  "_capture": "embed",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/api/embed",
+  "request": {
+    "model": "clef-flash",
+    "input": "untested change"
+  },
+  "http_status": 400,
+  "elapsed_ms": 8,
+  "_truncated": false,
+  "response": {
+    "error": "input after truncation exceeds maximum context length"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "_capture": "reject-malformed-json",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": "{\"model\":\"clef-flash\",",
+  "http_status": 400,
+  "elapsed_ms": 1,
+  "_truncated": false,
+  "response": {
+    "error": "unexpected end of JSON input"
+  }
+}

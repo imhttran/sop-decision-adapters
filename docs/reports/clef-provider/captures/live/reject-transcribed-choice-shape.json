@@ -1,0 +1,30 @@
+{
+  "_capture": "reject-transcribed-choice-shape",
+  "_observed_live": true,
+  "_bounded": true,
+  "_max_response_bytes": 8192,
+  "timestamp": "2026-10-07T16:15:48+00:00",
+  "endpoint": "http://localhost:11434",
+  "method": "POST",
+  "path": "/v1/systemone",
+  "request": {
+    "model": "clef-flash",
+    "state": "A change touches an untested code path and would deploy to production without review.",
+    "criteria": {
+      "risk": {
+        "type": "choice",
+        "choices": {
+          "LOW": "low",
+          "MEDIUM": "medium",
+          "HIGH": "high"
+        }
+      }
+    }
+  },
+  "http_status": 400,
+  "elapsed_ms": 6,
+  "_truncated": false,
+  "response": {
+    "error": "questions must contain 1\u201364 fields"
+  }
+}
