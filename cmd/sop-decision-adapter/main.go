@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/imhttran/sop-decision-adapters/decision"
+	"github.com/imhttran/sop-decision-adapters/internal/providers/clef"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/julia"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/nimble"
 )
@@ -46,7 +47,7 @@ func runDecide(args []string) int {
 	var (
 		providerName = fs.String("provider", "nimble", "decision provider to use")
 		baseURL      = fs.String("base-url", "", "provider base URL (defaults to OLLAMA_BASE_URL)")
-		model        = fs.String("model", "", "model name (defaults to NIMBLE_MODEL/JULIA_MODEL)")
+		model        = fs.String("model", "", "model name (defaults to NIMBLE_MODEL/JULIA_MODEL/CLEF_MODEL)")
 		file         = fs.String("file", "", "path to a JSON DecisionRequest file")
 		state        = fs.String("state", "", "free-form state/context (used when -file is not set)")
 		choices      = fs.String("choices", "", "comma-separated allowed choices for a single choice question")
@@ -131,7 +132,7 @@ func buildRequest(file, decisionID, state, choices string) (decision.DecisionReq
 }
 
 // availableProviders lists the provider names the CLI can select.
-const availableProviders = "nimble, julia"
+const availableProviders = "nimble, julia, clef"
 
 // newProvider resolves the requested provider name. The switch is the seam for
 // additional adapters.
@@ -154,6 +155,18 @@ func newProvider(name, baseURL, model string, timeout time.Duration) (decision.P
 		}
 		cfg.Timeout = timeout
 		return julia.New(cfg, nil), nil
+	case "clef":
+		// Clef is OFF unless explicitly enabled via CLEF_ENABLED; selection
+		// constructs the provider but does not enable it.
+		cfg := clef.ConfigFromEnv()
+		if strings.TrimSpace(baseURL) != "" {
+			cfg.BaseURL = baseURL
+		}
+		if strings.TrimSpace(model) != "" {
+			cfg.Model = model
+		}
+		cfg.Timeout = timeout
+		return clef.New(cfg, nil), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider %q (available: %s)", name, availableProviders)
 	}
@@ -220,9 +233,9 @@ Usage:
   sop-decision-adapter decide [flags]
 
 Flags (decide):
-  -provider string    decision provider to use (default "nimble"; available: nimble, julia)
-  -base-url string    Nimble provider base URL (defaults to OLLAMA_BASE_URL)
-  -model string       model name (defaults to NIMBLE_MODEL or JULIA_MODEL)
+  -provider string    decision provider to use (default "nimble"; available: nimble, julia, clef)
+  -base-url string    provider base URL (defaults to OLLAMA_BASE_URL)
+  -model string       model name (defaults to NIMBLE_MODEL, JULIA_MODEL, or CLEF_MODEL)
   -file string        path to a JSON DecisionRequest file (multi-question)
   -state string       free-form state/context (single-question form)
   -choices string     comma-separated allowed choices (single-question form)
@@ -246,9 +259,20 @@ Environment (julia):
   The default Julia path runs the repository-owned helper tools/julia/infer.py
   via JULIA_PYTHON. Set JULIA_INFERENCE_CMD to override it with a custom command.
 
+Environment (clef):
+  OLLAMA_BASE_URL     Ollama-compatible backend root (default http://localhost:11434)
+  CLEF_MODEL          Clef model name (default "clef-flash")
+  CLEF_TIMEOUT        request timeout (default 30s)
+  CLEF_ENABLED        explicit opt-in; Clef is OFF unless set to 1/true/yes
+
+  Clef is OFF by default and is only selected when enabled explicitly with
+  -provider clef AND CLEF_ENABLED=1. Selecting it without CLEF_ENABLED yields
+  an unavailable provider rather than serving decisions.
+
 Examples:
   sop-decision-adapter decide -provider nimble -file tests/fixtures/risk-evaluation.json
   sop-decision-adapter decide -provider julia -file tests/fixtures/risk-evaluation.json
+  CLEF_ENABLED=1 sop-decision-adapter decide -provider clef -file tests/fixtures/risk-evaluation.json
   sop-decision-adapter decide -decision-id risk -choices LOW,MEDIUM,HIGH \
     -state "deploying a schema migration during business hours"
 `)
