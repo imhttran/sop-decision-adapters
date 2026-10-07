@@ -147,6 +147,84 @@ must resolve on `PATH`; for the built-in helper the helper script **and** a real
 `JULIA_MODEL_PATH` must exist. For an operator override (`JULIA_INFERENCE_CMD`)
 only the program is checked.
 
+### HTTP bridge runtime (operator override)
+
+An operator may point `JULIA_INFERENCE_CMD` at `tools/julia/http_bridge.py`, which
+implements the **same** `CommandRunner` JSON stdin/stdout contract and forwards
+each question to an external Julia HTTP service instead of running ONNX
+in-process:
+
+```text
+decision.DecisionRequest
+        ↓
+Julia adapter (BuildInputs)               Go
+        ↓
+Julia runtime request (JSON stdin)
+        ↓
+tools/julia/http_bridge.py  ── HTTP ──▶   Julia service (JULIA_URL)
+        ↓
+Outputs (JSON stdout)
+        ↓
+Julia adapter (NormalizeOutputs)          Go
+        ↓
+decision.DecisionResult
+```
+
+The bridge is an implementation of the **existing** `Runner`/`CommandRunner`
+contract, **not** a new provider-neutral API: it adds no `decision` surface, and
+no Julia HTTP or `noul` vocabulary escapes `internal/providers/julia` or the
+bridge itself.
+
+#### Question-type translation
+
+The HTTP service speaks Julia's native qtype tokens; the bridge translates the
+provider-neutral type and normalizes the response:
+
+| provider-neutral | Julia (HTTP) | response → runner `Outputs`                                                     |
+| ---------------- | ------------ | ------------------------------------------------------------------------------- |
+| `choice`         | `choice`     | `{index, probabilities}` → `{choice, probabilities}`                            |
+| `boolean`        | `noul`       | `{index, probabilities}` → `{probability: P(true)}`; options `["false","true"]` |
+| `score`          | `score`      | `{index, probabilities}` → `{score: Σ i·pᵢ}`                                    |
+
+The `boolean → noul` translation is confined to the bridge; the provider-neutral
+contract never exposes `noul`. Julia boolean (noul) options are always
+`["false", "true"]` (index 0 false, index 1 true), so the normalized boolean
+probability is `probabilities[1]` regardless of the response's `index`.
+
+#### SCORE semantics (verified)
+
+Julia SCORE is the **expected zero-based option index** `Σ i·pᵢ` — the same rule as
+`infer.py`'s `expected_index`, and **not** the argmax index nor the selected
+option's numeric value. The bridge therefore requires the HTTP runtime to return
+per-option `probabilities` for a `score` question and computes the expected index
+from them; if `probabilities` are absent the bridge reports a `malformed` error
+rather than fabricating a score. This was verified against the local runtime
+(`SupersonicLabs/Julia-1` at `/predict`): a `score` request returned
+`{"index": 1, "probabilities": [0.2207, 0.6556, 0.1126, 0.0110, 0.0]}`, and the
+bridge normalized it to `score = 0.9139…` (the expected index, not `index = 1`).
+So the expected-index contract **is** satisfiable on the HTTP path.
+
+#### Bridge configuration
+
+| Environment variable | Meaning                                            | Default                  |
+| -------------------- | -------------------------------------------------- | ------------------------ |
+| `JULIA_URL`          | root of the Julia HTTP service                     | `http://127.0.0.1:8011`  |
+| `JULIA_HTTP_TIMEOUT` | per-request HTTP timeout, seconds                  | `30`                     |
+| `JULIA_MODEL_ID`     | model id the bridge reports (runner-reported wins) | `SupersonicLabs/Julia-1` |
+| `JULIA_MODEL`        | fallback model id when `JULIA_MODEL_ID` is unset   | `julia`                  |
+
+```sh
+export JULIA_INFERENCE_CMD="python3 $PWD/tools/julia/http_bridge.py"
+export JULIA_URL="http://127.0.0.1:8011"
+export JULIA_MODEL="SupersonicLabs/Julia-1"
+```
+
+The bridge reports failures on stdout as `{"error":{"kind":…,"message":…}}`
+with `kind` in `unavailable` (transport/runtime unreachable, connection refused,
+timeout), `malformed` (bad bridge input or unusable provider response), or
+`failure` (the service answered with an HTTP error such as 4xx/5xx). Human
+diagnostics go to **stderr**; stdout carries exactly one JSON object.
+
 ## ONNX graph contract
 
 The helper executes Julia-1-ONNX with these tensors:
@@ -237,7 +315,17 @@ fakes and hermetic `sh -c` commands and requires no ONNX, Julia, Ollama, Python,
 or network. The helper's pure functions are unit-tested with the standard
 library alone (`python3 tools/julia/test_infer.py`).
 
-The live test is opt-in and only runs when `JULIA_INTEGRATION_TEST=1`; it SKIPS
-(never fails the suite) when the runtime is not configured, otherwise it drives
-Go → helper → ONNX Runtime → Julia-1-ONNX and asserts the contract, not exact
-judgments.
+The live tests are opt-in and SKIP (never fail the suite) when not enabled:
+
+- `JULIA_INTEGRATION_TEST=1` drives Go → helper → ONNX Runtime → Julia-1-ONNX.
+- `JULIA_HTTP_INTEGRATION_TEST=1` (with `JULIA_URL`) drives
+  Go → `tools/julia/http_bridge.py` → Julia HTTP service.
+
+Both assert the contract, not exact judgments. The bridge's pure functions and
+its request/response translation — including the `boolean → noul` payload and the
+SCORE expected-index rule — are unit-tested with the standard library and a local
+mock HTTP server, never a real service or port 8011:
+
+```sh
+python3 tools/julia/test_http_bridge.py
+```
