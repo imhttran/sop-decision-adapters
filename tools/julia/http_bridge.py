@@ -310,12 +310,19 @@ def build_output(request) -> dict:
         raise BridgeError("malformed", "questions must be an array")
 
     answers = {}
+    seen = set()
     for question in questions:
         if not isinstance(question, dict):
             raise BridgeError("malformed", "each question must be a JSON object")
         qid = question.get("id")
         if not isinstance(qid, str) or qid.strip() == "":
             raise BridgeError("malformed", "question is missing id")
+        if qid in seen:
+            # The provider-neutral contract already prohibits duplicate ids; the
+            # bridge refuses them too, so a duplicate never silently overwrites an
+            # earlier answer at the runner boundary.
+            raise BridgeError("malformed", f"duplicate question id: {qid!r}")
+        seen.add(qid)
         qtype = question_type(question)
         result = predict(state, question, qtype)
         answers[qid] = normalize(question, qtype, result)

@@ -261,6 +261,20 @@ class AggregateTests(BridgeTestCase):
         self.assertEqual(out["answers"]["approval_required"], {"probability": 0.95})
         self.assertEqual(len(server.requests), 2)
 
+    def test_partial_multi_question_failure_fails_closed(self):
+        # The second question fails; the bridge emits no partial output.
+        def responder(record):
+            if record["json"]["type"] == "noul":
+                return (500, {"detail": "noul boom"}, 0)
+            return (200, {"index": 0, "probabilities": [1.0, 0.0, 0.0]}, 0)
+
+        self.start_server(responder)
+        self.assert_bridge_error(
+            "failure",
+            http_bridge.build_output,
+            {"state": "s", "questions": [choice(), boolean()]},
+        )
+
 
 class TransportFailureTests(BridgeTestCase):
     def test_server_unavailable_connection_refused(self):
@@ -304,6 +318,34 @@ class TransportFailureTests(BridgeTestCase):
         self.start_server(lambda _req: (200, b"not json", 0))
         self.assert_bridge_error(
             "malformed",
+            http_bridge.build_output,
+            {"state": "s", "questions": [choice()]},
+        )
+
+    def test_empty_response_is_malformed(self):
+        self.start_server(lambda _req: (200, b"", 0))
+        self.assert_bridge_error(
+            "malformed",
+            http_bridge.build_output,
+            {"state": "s", "questions": [choice()]},
+        )
+
+    def test_http_404_is_failure(self):
+        self.start_server(lambda _req: (404, {"detail": "no such route"}, 0))
+        err = self.assert_bridge_error(
+            "failure",
+            http_bridge.build_output,
+            {"state": "s", "questions": [choice()]},
+        )
+        self.assertIn("404", err.message)
+
+    def test_dns_failure_is_unavailable(self):
+        # `.invalid` is reserved to never resolve, so this exercises the
+        # name-resolution branch of the transport error handling.
+        self.patch("TIMEOUT", 2.0)
+        self.patch("JULIA_URL", "http://does-not-exist.invalid:8011")
+        self.assert_bridge_error(
+            "unavailable",
             http_bridge.build_output,
             {"state": "s", "questions": [choice()]},
         )
@@ -407,6 +449,16 @@ class InputValidationTests(BridgeTestCase):
         self.start_server(lambda _req: (200, {"index": 0}, 0))
         self.assert_bridge_error(
             "malformed", http_bridge.build_output, {"state": "s", "questions": ["nope"]}
+        )
+
+    def test_duplicate_question_id(self):
+        self.start_server(
+            lambda _req: (200, {"index": 0, "probabilities": [1.0, 0.0, 0.0]}, 0)
+        )
+        self.assert_bridge_error(
+            "malformed",
+            http_bridge.build_output,
+            {"state": "s", "questions": [choice("dup"), choice("dup")]},
         )
 
     def test_missing_question_text(self):
