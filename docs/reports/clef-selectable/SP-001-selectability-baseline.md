@@ -58,13 +58,18 @@ Defined in `internal/providers/clef/config.go`:
 - The CLI then probes `provider.Available(ctx)` and, if false, writes `warning: provider %q is not available` to stderr but proceeds to call `provider.Decide`. The observable disabled behavior surfaces through the `Decide` path (expected `decision.ErrUnavailable`, mapped by `runDecide` to exit code 3 with `provider unavailable: ...`).
 - Help text in `main.go` states: "Clef is OFF by default and is only selected when enabled explicitly with -provider clef AND CLEF_ENABLED=1. Selecting it without CLEF_ENABLED yields an unavailable provider rather than serving decisions."
 
-## 5. `decision.Provider` seam
+## 5. `decision.Provider` seam and the selection switch
 
-Located in `decision/provider.go`. The interface is:
+Two distinct symbols are involved; do not conflate them.
+
+**Provider-neutral interface** — `decision/provider.go`:
 
 ```go
-func newProvider(...)  // selects an adapter; the switch is the seam for additional adapters
-
+type Provider interface {
+	Name() string
+	Available(ctx context.Context) bool
+	Decide(ctx context.Context, req DecisionRequest) (DecisionResult, error)
+}
 ```
 
 Interface contract:
@@ -74,16 +79,38 @@ Interface contract:
 
 Callers depend only on this contract, never on provider-specific types (per the file comment).
 
+**Selection seam** — `func newProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, error)` in package `main` (`cmd/sop-decision-adapter/main.go`, lines 139–173). Its `switch` is the seam for additional adapters. It returns the `decision.Provider` interface, so no provider-specific type crosses the boundary. `newProvider` is **not** in `decision/`.
+
 ## 6. `clef_selection_test.go` coverage inventory
 
-- **File:** `cmd/sop-decision-adapter/clef_selection_test.go`.
-- This baselining stage inspected that the file exists and is the dedicated selection test surface for Clef. (Coverage case-by-case inventory: cases asserted and gaps are to be finalized against this file's contents during implementation follow-up; the file is the authoritative source.)
+- **File:** `cmd/sop-decision-adapter/clef_selection_test.go` (6 test functions).
+- **Existing coverage:**
+  - `TestNewProviderClefOffByDefault` — `newProvider("clef", …)` constructs a Clef provider without `CLEF_ENABLED`; `Available()` is false; `Decide()` returns `ErrUnavailable`.
+  - `TestNewProviderClefMixedCase` — name resolution trims/lowercases (`"  Clef "` → Clef).
+  - `TestNewProviderClefExplicitlyEnabled` — with `CLEF_ENABLED=1`, selection constructs an enabled provider; `Decide` does not return `ErrDisabled`.
+  - `TestNewProviderUnknownFailsClosed` — unknown name returns `(nil, error)` containing `"unsupported provider"`.
+  - `TestAvailableProvidersIncludesClef` — the advertised list includes `clef`, `nimble`, and `julia`.
+  - `TestNewProviderNimbleAndJuliaUnchanged` — `nimble` and `julia` still resolve to their providers.
+- **Coverage gaps relevant to selectability (candidates for SP-006):**
+  - Absent/empty `-provider` (`""`) → `nimble` default is not asserted.
+  - Explicit disabled-Clef non-selection by absence/config default is not asserted beyond `TestNewProviderClefOffByDefault`.
+  - Rollback (deselect + disable) has no dedicated test.
+  - The `CLEF_ENABLED` value matrix (`1`/`true`/`yes` vs other) at the selection seam is not asserted.
 
 ## 7. Carried-forward findings M-1 / L-1 / L-2 / I-1
 
-- **Status:** The findings M-1, L-1, L-2, and I-1 are referenced in the SP-001 input as carried-forward. Concrete code locations must be traced against the repository.
-- **Search scope performed:** `internal/providers/` (clef, julia, nimble), `decision/`, `cmd/sop-decision-adapter/`.
-- **Status:** Recorded here as requiring concrete file/symbol resolution; if not locatable, marked unresolved with the search scope above.
+Each finding is resolved to concrete repository evidence. All four are open,
+non-blocking hardening items; SP-003 decides their disposition.
+
+- **M-1 (MEDIUM — BaseURL not parsed/validated at construction; malformed URL fails closed at request creation).**
+  - Evidence: `internal/providers/clef/transport.go` `newHTTPTransport` (lines 43–51) stores `baseURL` after only `strings.TrimSpace`/`strings.TrimRight`, with no `url.Parse`. `Config.WithDefaults` (`internal/providers/clef/config.go` lines 48–59) likewise never validates `BaseURL`.
+  - Behavior: a malformed URL surfaces at request construction, `http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+"/v1/systemone", …)` (`transport.go` lines 63–66), as a plain wrapped error. `classifyTransportError` (`clef.go` lines 152–163) maps it to `KindProviderFailure` — fail-closed, no successful evidence.
+- **L-1 (LOW — HTTP is allowed for the local backend).**
+  - Evidence: `internal/providers/clef/config.go` line 18 sets `DefaultBaseURL = "http://localhost:11434"`; `newHTTPTransport` (`transport.go` lines 43–51) accepts any scheme with no TLS enforcement.
+- **L-2 (LOW — successful response bodies have no explicit hard byte cap).**
+  - Evidence: the success decode path in `transport.go` — `SystemOne` uses `json.NewDecoder(resp.Body).Decode(&out)` (lines 80–85) and `ListModels` uses the same (lines 116–119), with no size limit. Only non-200 error bodies are bounded, via `io.LimitReader(resp.Body, 4096)` (lines 76 and 112).
+- **I-1 (INFO — invalid `CLEF_TIMEOUT` falls back to the default timeout).**
+  - Evidence: `internal/providers/clef/config.go` `envDurationOr` (lines 86–96) returns the fallback when `time.ParseDuration` fails or returns a non-positive duration.
 
 ## 8. CLEF-010 readiness statement and live-evidence state
 
