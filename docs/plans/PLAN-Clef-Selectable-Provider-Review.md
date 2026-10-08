@@ -45,9 +45,11 @@ Determine whether Clef may become an **explicitly selectable** provider, and
 under what conditions, without changing `agentic-sop`, without changing any
 default, and without granting Clef governance authority.
 
-"Selectable" is defined operationally by this plan (SP-002). This plan builds, at
-most, a **minimal, opt-in** selection surface for the adapter/CLI and the tests
-that prove default-preservation; the final task (SP-010) issues one of
+"Selectable" is defined operationally by this plan (SP-002). The `-provider clef`
+selection surface already exists (recorded in SP-001); this plan **verifies** that
+surface against the SP-002 contract and implements only demonstrated gaps or
+required SP-003 hardening preconditions, plus the tests that prove
+default-preservation; the final task (SP-010) issues one of
 `SELECTABLE_READY`, `SELECTABLE_READY_WITH_CONDITIONS`, or `NOT_SELECTABLE_READY`.
 
 Clef remains **OFF** and **non-default** throughout this plan. No production
@@ -387,10 +389,19 @@ None.
 
 ---
 
-## SP-005 — Minimal Selection Implementation
+## SP-005 — Selection Verification and Minimal Implementation
 
-Implement the minimal selection surface defined by SP-002, within the adapter/CLI
-only.
+Verify that the existing `-provider clef` selection surface satisfies the SP-002
+contract, using the existing repository architecture (`newProvider` in
+`cmd/sop-decision-adapter/main.go`). Implement only:
+
+- the minimal SP-003 hardening preconditions, if SP-003 declared any; and
+- any genuinely missing selection behavior demonstrated by repository evidence.
+
+Do not add a second provider-selection mechanism: `-provider clef` already
+resolves today (recorded in SP-001). Where repository evidence shows the existing
+surface already satisfies SP-002, record that verification outcome and make no
+selection change.
 
 Boundaries:
 
@@ -400,7 +411,7 @@ Boundaries:
 - every existing provider default MUST remain unchanged;
 - no Clef-specific branch/type may enter the `decision` package;
 - no provider-specific policy may enter `agentic-sop`;
-- the disabled/rollback path MUST be implemented per SP-002;
+- the disabled/rollback path MUST be verified per SP-002;
 - if SP-003 declared preconditions, implement only those minimal hardenings.
 
 If SP-002 or SP-004 concludes selection should not be exposed, this task records
