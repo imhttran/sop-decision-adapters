@@ -79,6 +79,28 @@ under this plan's final decision; it is never implied by passing tests.
 
 ---
 
+## Capabilities
+
+### Go build/test toolchain — EXISTS
+
+Evidence: baseline `go build ./...`, `go vet ./...`, and `go test ./...` pass offline at baseline HEAD `2b0909b`.
+
+Owner: operator-supplied development environment.
+
+---
+
+### Ollama SystemOne decision endpoint serving Clef — UNKNOWN
+
+Evidence: not exercised live in CLEF-006/CLEF-008 (live Clef `/v1/systemone` recorded UNAVAILABLE; oMLX NOT_EXERCISED).
+
+Gap: a live Clef decision transport has not been verified in this environment.
+
+Owner: local runtime operator.
+
+Resolution: SP-004 decides whether live runtime evidence is required before selectability; no stage requires this capability, so its UNKNOWN status does not block repository discovery.
+
+---
+
 ## Non-Goals
 
 - Do not modify `agentic-sop`.
@@ -527,7 +549,6 @@ basis, and record the live state as NOT_EXERCISED / UNAVAILABLE without fabricat
 ### Requires
 
 - Go build/test toolchain
-- (conditionally) Ollama SystemOne decision endpoint serving Clef
 
 ### Deliverables
 
