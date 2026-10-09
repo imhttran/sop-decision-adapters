@@ -85,7 +85,10 @@ Deferred work. Nothing here is required for the current shipped phase.
 - [ ] **CLM, JEV/OpenJEV providers (Phase 3)**.
 - [ ] **Provider registry** — dynamic provider discovery/selection.
 - [ ] **Shadow evaluation (Phase 4)** — run a second provider for observation
-      only; never affect execution.
+      only; never affect execution. The adapter-side harness already exists
+      (`internal/shadow`, delivered by CLEF-007) and is deliberately unwired: no
+      production package imports it. What remains is the wiring, not the
+      harness. Do not mistake its empty import graph for dead code.
 - [ ] **agentic-sop integration** — consume the public `decision` package from
       `agentic-sop` (kept out of the adapter repository).
 
