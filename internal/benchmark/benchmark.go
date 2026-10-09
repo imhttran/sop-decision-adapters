@@ -317,7 +317,7 @@ func observeSafely(ctx context.Context, src Source, c Case) (obs shadow.Observat
 		elapsed = time.Since(start)
 	}()
 	obs, err = src.Observe(ctx, c)
-	return obs, err, 0
+	return
 }
 
 // isTimeout mirrors the CLEF-007 shadow containment classification: a context
