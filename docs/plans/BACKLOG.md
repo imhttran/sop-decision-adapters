@@ -65,6 +65,23 @@ Deferred work. Nothing here is required for the current shipped phase.
       cannot pass caller-supplied false/true criteria. Preserving them requires a
       change to the public contract and is deferred. **Owner:** `decision`,
       `internal/providers/julia`.
+- [ ] **De-duplicate the Clef/Nimble SystemOne transport and wire types.**
+      `internal/providers/clef/{transport,systemone}.go` are near-byte-for-byte
+      copies of `internal/providers/nimble/{transport,systemone}.go` (same HTTP
+      client, error classification, and `/v1/systemone` wire shapes under
+      different casing). `translate.go` differs legitimately (Clef wraps
+      `ErrUnsupported`) and is out of scope for this item. Extract the shared
+      transport + wire types into one internal package (e.g.
+      `internal/providers/systemone`) that both adapters wrap. Deferred because
+      both packages' tests reach the unexported types directly (white-box,
+      same-package), so the extraction touches most of
+      `internal/providers/{clef,nimble}/*_test.go` (~3000 lines) for a
+      maintenance-only (not correctness) gain — the concrete risk this
+      duplication caused (a validation fix landing in one copy and not the
+      other; see `decision.Answer.Validate`'s NaN/Inf guard) is already closed
+      at the shared `decision` package choke point, so further drift of this
+      kind is no longer possible even with the duplication left in place.
+      **Owner:** `internal/providers/clef`, `internal/providers/nimble`.
 - [ ] **CLM, JEV/OpenJEV providers (Phase 3)**.
 - [ ] **Provider registry** — dynamic provider discovery/selection.
 - [ ] **Shadow evaluation (Phase 4)** — run a second provider for observation
