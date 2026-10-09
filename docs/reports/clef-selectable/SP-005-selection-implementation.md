@@ -169,7 +169,10 @@ go vet ./...     # exit 0
 go test ./...    # exit 0
 ```
 
-`go test ./...` output (all packages `ok`):
+`go test ./...` output (all packages `ok`), captured when this report was
+written. It is left verbatim as a historical record and is **not** current
+output: `internal/benchmark`, listed below, was deleted unused in `77da7b9` and
+no longer appears in a test run. (`internal/shadow` is still present.)
 
 ```
 ok  github.com/imhttran/sop-decision-adapters/cmd/sop-decision-adapter

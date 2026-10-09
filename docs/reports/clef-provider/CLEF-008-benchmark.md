@@ -1,22 +1,31 @@
 # CLEF-008 — Benchmark and Compare Decision Quality
 
 **Type:** Focused decision-provider benchmark report (non-normative).
-**Status:** IMPLEMENTED — the adapter-side benchmark harness and corpus are
-implemented and committed in `internal/benchmark/`. The primary **Nimble** cell
-was **MEASURED** against the local runtime; the primary **Clef** cell is
-**UNAVAILABLE** in this environment; the conditional cells are **NOT_EXERCISED**.
-No value is fabricated and no unavailable observation is reported as a measured
-zero.
+**Status:** HISTORICAL — the harness this report describes **no longer exists**.
+`internal/benchmark/` was deleted in commit `77da7b9` as dead code: nothing
+outside the package ever imported it, it had no CLI subcommand or make target to
+run it, `DefaultCells()` and `EmbeddedCorpus()` had no callers, and its own test
+asserted its disuse. Every `internal/benchmark/...` path cited below is a
+historical citation, not a present file. The measurements remain a valid record
+of what was observed when the harness ran: the primary **Nimble** cell was
+**MEASURED** against the local runtime; the primary **Clef** cell was
+**UNAVAILABLE** in that environment; the conditional cells were
+**NOT_EXERCISED**. No value is fabricated and no unavailable observation is
+reported as a measured zero.
 **Scope:** `sop-decision-adapters` decision-provider benchmark only. Not a general
 LLM benchmark. No SOP policy change. Benchmark code is off the production
 decision path.
 **Dependencies:** CLEF-001, CLEF-002, CLEF-003, CLEF-006, CLEF-007.
 
+To re-run this benchmark the harness must first be rebuilt. `internal/shadow`
+(the CLEF-007 observation vocabulary this harness borrowed) is retained and is
+the starting point; see the "Removed" section of `docs/plans/BACKLOG.md`.
+
 This report uses four explicit measurement states throughout:
 
 | State             | Meaning                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------ |
-| **IMPLEMENTED**   | Code/artifact exists in the repository.                                                    |
+| **IMPLEMENTED**   | Code/artifact existed in the repository when this report was written. The harness artifacts are since REMOVED (`77da7b9`). |
 | **MEASURED**      | A value was observed from an executed live run.                                            |
 | **DERIVED**       | A value computed adapter-side from measured signals (for example latency percentiles).     |
 | **UNAVAILABLE**   | The cell's runtime/prerequisite was absent; no value was measured. Never reported as zero. |
@@ -42,23 +51,27 @@ Non-goals (explicitly out of scope):
 
 ---
 
-## 1. Deliverables (IMPLEMENTED)
+## 1. Deliverables (REMOVED — historical paths)
 
-| Deliverable       | Path                                                                       | State                   |
+Delivered as described, then deleted in commit `77da7b9`. The paths below name
+where each artifact lived; none is present in the tree today.
+
+| Deliverable       | Historical path                                                            | State                   |
 | ----------------- | -------------------------------------------------------------------------- | ----------------------- |
-| Benchmark harness | `internal/benchmark/benchmark.go`, `internal/benchmark/cells.go`           | IMPLEMENTED             |
-| Benchmark corpus  | `internal/benchmark/corpus.json` (+ loader `internal/benchmark/corpus.go`) | IMPLEMENTED             |
-| Harness tests     | `internal/benchmark/benchmark_test.go`                                     | IMPLEMENTED             |
-| Benchmark report  | `docs/reports/clef-provider/CLEF-008-benchmark.md`                         | IMPLEMENTED (this file) |
+| Benchmark harness | `internal/benchmark/benchmark.go`, `internal/benchmark/cells.go`           | REMOVED (was delivered) |
+| Benchmark corpus  | `internal/benchmark/corpus.json` (+ loader `internal/benchmark/corpus.go`) | REMOVED (was delivered) |
+| Harness tests     | `internal/benchmark/benchmark_test.go`                                     | REMOVED (was delivered) |
+| Benchmark report  | `docs/reports/clef-provider/CLEF-008-benchmark.md`                         | PRESENT (this file)     |
 
-The harness is a library (`benchmark.Run(ctx, corpus, cells)`) rather than a new
+The harness was a library (`benchmark.Run(ctx, corpus, cells)`) rather than a new
 CLI subcommand: no benchmark command was added to `cmd/`, to keep the change
-minimal and off the production surface. Invocation and reproduction are described
+minimal and off the production surface. Having no runner is also part of why it
+was later deleted unused. Invocation and reproduction are described
 in §10.
 
 ---
 
-## 2. Benchmark corpus (IMPLEMENTED)
+## 2. Benchmark corpus (REMOVED — as delivered)
 
 - **Version:** `clef-bench-v1`
 - **SHA-256 (canonical):** `9825f18a871e57c05725d467fee5a2642330b255c00ddfba595ead2f939a81dc`
@@ -82,7 +95,7 @@ source whitespace, and is stable across processes (asserted by test).
 
 ---
 
-## 3. Harness architecture (IMPLEMENTED)
+## 3. Harness architecture (REMOVED — as delivered)
 
 - `Run(ctx, corpus, cells)` evaluates every cell against the **identical corpus
   and case order** and returns a deterministic `Report`.
@@ -218,9 +231,10 @@ quantization/fidelity delta is reported. Recorded explicitly rather than inferre
 
 ## 8. Policy-neutrality and containment
 
-- **Off the production path:** no `.go` file outside `internal/benchmark/` imports
-  the benchmark harness; this is asserted by
-  `TestBenchmarkNotImportedByProductionPath`.
+- **Off the production path:** no `.go` file outside `internal/benchmark/` imported
+  the benchmark harness; this was asserted by
+  `TestBenchmarkNotImportedByProductionPath`. That same disuse is why the harness
+  was later deleted (`77da7b9`).
 - **No authority:** the harness holds no reference to any SOP policy writer, and no
   result can influence routing, governance, or approval. Failures are contained
   (`TestPanicContained`).
@@ -246,10 +260,10 @@ quantization/fidelity delta is reported. Recorded explicitly rather than inferre
 | Quantization/fidelity impact recorded where measurable | SATISFIED | §6 — "not measurable" marked explicitly                 |
 | Not a general LLM benchmark                            | SATISFIED | §0, §2 — choice-decision corpus only                    |
 | Does not modify SOP policy                             | SATISFIED | §8 — off-path; no importers; no policy writer           |
-| Benchmark harness deliverable present                  | SATISFIED | `internal/benchmark/benchmark.go`, `cells.go`           |
-| Benchmark corpus deliverable present                   | SATISFIED | `internal/benchmark/corpus.json`                        |
+| Benchmark harness deliverable present (at the time)    | SATISFIED | `internal/benchmark/benchmark.go`, `cells.go` — since REMOVED (`77da7b9`) |
+| Benchmark corpus deliverable present (at the time)     | SATISFIED | `internal/benchmark/corpus.json` — since REMOVED (`77da7b9`) |
 
-Harness tests (`internal/benchmark/benchmark_test.go`) additionally prove: corpus
+Harness tests (`internal/benchmark/benchmark_test.go`, since removed) additionally proved: corpus
 loads deterministically with stable IDs; malformed corpus entries fail explicitly;
 every cell uses the same corpus; unavailable providers are reported as unavailable,
 not zero; numerator/denominator/sample/excluded counts are preserved; invalid and
