@@ -2,6 +2,7 @@ package decision
 
 import (
 	"errors"
+	"math"
 	"os"
 	"testing"
 )
@@ -101,6 +102,57 @@ func TestAnswerValidateUnknownType(t *testing.T) {
 	answer := Answer{Type: AnswerType("ranking")}
 	if err := answer.Validate(); !errors.Is(err, ErrMalformedResponse) {
 		t.Fatalf("expected ErrMalformedResponse, got %v", err)
+	}
+}
+
+// TestAnswerValidateRejectsNonFiniteValues is a regression test for the NaN/Inf
+// rejection added to inUnitRangeFloat: NaN, +Inf, and -Inf must be rejected with
+// ErrMalformedResponse for every range-checked field.
+func TestAnswerValidateRejectsNonFiniteValues(t *testing.T) {
+	nonFinite := []struct {
+		name  string
+		value float64
+	}{
+		{"NaN", math.NaN()},
+		{"+Inf", math.Inf(1)},
+		{"-Inf", math.Inf(-1)},
+	}
+
+	cases := []struct {
+		name   string
+		answer Answer
+	}{
+		{
+			name:   "choice_probabilities",
+			answer: Answer{Type: AnswerChoice, Choice: "HIGH", Probabilities: map[string]float64{"HIGH": 0}},
+		},
+		{
+			name:   "boolean_probability",
+			answer: Answer{Type: AnswerBoolean},
+		},
+		{
+			name:   "confidence",
+			answer: Answer{Type: AnswerChoice, Choice: "HIGH", Confidence: ptr(0)},
+		},
+	}
+
+	for _, tc := range cases {
+		for _, nf := range nonFinite {
+			answer := tc.answer
+			switch tc.name {
+			case "choice_probabilities":
+				answer.Probabilities = map[string]float64{"HIGH": nf.value}
+			case "boolean_probability":
+				answer.Probability = nf.value
+			case "confidence":
+				answer.Confidence = ptr(nf.value)
+			}
+			t.Run(tc.name+"/"+nf.name, func(t *testing.T) {
+				if err := answer.Validate(); !errors.Is(err, ErrMalformedResponse) {
+					t.Fatalf("expected ErrMalformedResponse for %v, got %v", nf.value, err)
+				}
+			})
+		}
 	}
 }
 

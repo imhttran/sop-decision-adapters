@@ -1,6 +1,9 @@
 package decision
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // AnswerType enumerates the provider-neutral kinds of answers a provider can
 // return. The values mirror QuestionType so answers preserve the semantic type
@@ -31,17 +34,18 @@ type Answer struct {
 	// Choice is the selected choice for a CHOICE answer.
 	Choice string `json:"choice,omitempty"`
 
-	// Probabilities maps each allowed choice to its probability in [0, 1] for
-	// CHOICE answers. It is optional but preserved when supplied.
+	// Probabilities maps each allowed choice to a finite probability in [0, 1]
+	// for CHOICE answers. It is optional but preserved when supplied.
 	Probabilities map[string]float64 `json:"probabilities,omitempty"`
 
-	// Confidence is the provider's confidence in the answer, in [0, 1]. It is
-	// optional and preserved only when supplied.
+	// Confidence is the provider's confidence in the answer, a finite value in
+	// [0, 1]. It is optional and preserved only when supplied.
 	Confidence *float64 `json:"confidence,omitempty"`
 
-	// Probability is the provider's yes-probability for a BOOLEAN answer, in
-	// [0, 1]. It is provider output only: whether it is sufficient to trigger
-	// an approval gate is decided by agentic-sop, not by this adapter.
+	// Probability is the provider's yes-probability for a BOOLEAN answer, a
+	// finite value in [0, 1]. It is provider output only: whether it is
+	// sufficient to trigger an approval gate is decided by agentic-sop, not by
+	// this adapter.
 	Probability float64 `json:"probability,omitempty"`
 
 	// Score is the numeric value for a SCORE answer.
@@ -61,12 +65,12 @@ func (a Answer) Validate() error {
 			return fmt.Errorf("%w: choice answer is empty", ErrMalformedResponse)
 		}
 		for choice, p := range a.Probabilities {
-			if p < 0 || p > 1 {
+			if !inUnitRangeFloat(p) {
 				return fmt.Errorf("%w: probability %v for choice %q out of range [0,1]", ErrMalformedResponse, p, choice)
 			}
 		}
 	case AnswerBoolean:
-		if a.Probability < 0 || a.Probability > 1 {
+		if !inUnitRangeFloat(a.Probability) {
 			return fmt.Errorf("%w: boolean probability %v out of range [0,1]", ErrMalformedResponse, a.Probability)
 		}
 	case AnswerScore:
@@ -82,10 +86,17 @@ func inUnitRange(name string, v *float64) error {
 	if v == nil {
 		return nil
 	}
-	if *v < 0 || *v > 1 {
+	if !inUnitRangeFloat(*v) {
 		return fmt.Errorf("%w: %s %v out of range [0,1]", ErrMalformedResponse, name, *v)
 	}
 	return nil
+}
+
+// inUnitRangeFloat reports whether v is a finite number within [0, 1]. NaN and
+// Inf are rejected explicitly: a direct "< 0 || > 1" comparison is false for
+// NaN, which would otherwise let a NaN probability pass as valid.
+func inUnitRangeFloat(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 1
 }
 
 // Usage reports provider-neutral token accounting for a decision.
